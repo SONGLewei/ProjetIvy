@@ -14,6 +14,7 @@ class GraphicalView(tk.Tk):
         self.floor_count = 0
         self.current_floor = None
         self.floor_buttons = []
+        self.current_tool = None
 
         self.colors = {
             "topbar_bg":    "#f4f4f4",
@@ -33,7 +34,7 @@ class GraphicalView(tk.Tk):
         ivy_bus.subscribe("new_floor_update",         self.on_new_floor_update)
         ivy_bus.subscribe("tool_selected_update",     self.on_tool_selected_update)
         ivy_bus.subscribe("show_alert_request",       self.on_show_alert_request)
-        ivy_bus.subscribe("clear_canvas_update", self.on_clear_canvas_update)
+        ivy_bus.subscribe("clear_canvas_update",      self.on_clear_canvas_update)
 
     def _setup_style(self):
         style = ttk.Style(self)
@@ -90,7 +91,9 @@ class GraphicalView(tk.Tk):
 
         self.canvas = tk.Canvas(canvasFrame, bg="white")
         self.canvas.pack(fill=tk.BOTH, expand=True)
-        self.canvas.bind("<Button-1>", self.on_canvas_click)
+        self.canvas.bind("<Button-1>", self.on_canvas_left_click_for_wall)
+        self.canvas.bind("<Button-3>", self.on_canvas_right_click_for_wall)
+        self.canvas.bind("<Motion>",   self.on_canvas_move_for_wall)
 
         # line to seperate
         sep = ttk.Separator(mainFrame, orient="vertical")
@@ -120,11 +123,25 @@ class GraphicalView(tk.Tk):
         rightSpace.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     # --------------------------------- Handle events ------------------------------------------------
-    def on_canvas_click(self, event):
-        ivy_bus.publish("draw_wall_request", {
-            "x": event.x,
-            "y": event.y
-        })
+    def on_canvas_left_click_for_wall(self, event):
+        if self.current_tool == "wall":
+            ivy_bus.publish("draw_wall_request", {
+                "x": event.x,
+                "y": event.y,
+                "is_click":True
+            })
+    
+    def on_canvas_move_for_wall(self,event):
+        if self.current_tool == "wall":
+            ivy_bus.publish("draw_wall_request",{
+                "x": event.x,
+                "y": event.y,
+                "is_preview": True
+            })
+    
+    def on_canvas_right_click_for_wall(self,event):
+        if self.current_tool == "wall":
+            ivy_bus.publish("cancal_to_draw_wall_request",{})
 
     def on_new_floor_button_click(self):
         ivy_bus.publish("new_floor_request", {})
@@ -145,7 +162,25 @@ class GraphicalView(tk.Tk):
         start = data.get("start")
         end   = data.get("end")
         fill  = data.get("fill", "black")
-        self.canvas.create_line(start[0], start[1], end[0], end[1], fill=fill)
+
+        if fill == "gray":
+            if hasattr(self,"temp_line"):
+                self.canvas.delete(self.temp_line)
+            self.temp_line = self.canvas.create_line(
+                start[0], start[1], end[0], end[1],
+                fill="gray", dash=(4, 2)                
+            )
+        
+        else:
+            if hasattr(self, "temp_line"):
+                self.canvas.delete(self.temp_line)
+                del self.temp_line
+
+            self.canvas.create_line(
+                start[0], start[1], end[0], end[1],
+                fill="black"
+            )
+        #self.canvas.create_line(start[0], start[1], end[0], end[1], fill=fill)
 
     def on_floor_selected_update(self, data):
         """
@@ -198,7 +233,7 @@ class GraphicalView(tk.Tk):
         When the Controller publishes 'tool_selected_update', it can update the interface status
         (such as highlighting the current tool button, or displaying "Current Tool" in the status bar)
         """
-        tool = data.get("tool")
+        self.current_tool = data.get("tool")
 
 
     def on_show_alert_request(self, data):
