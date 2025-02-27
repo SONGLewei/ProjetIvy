@@ -15,12 +15,9 @@ class Wall:
         self.end = end
         self.orientation = self._determine_orientation()
 
-        # Adjust the endpoint coordinates based on the orientation to ensure the wall is either horizontal or vertical
         if self.orientation == "horizontal":
-            # Keep the y-coordinate unchanged
             self.end = (end[0], start[1])
-        else:  # vertical
-            # Keep the x-coordinate unchanged
+        else:
             self.end = (start[0], end[1])
     
     def _determine_orientation(self):

@@ -1,5 +1,6 @@
 import os
 import tkinter as tk
+import tkinter.simpledialog as simpledialog
 from tkinter import ttk, PhotoImage
 from tkinter import messagebox
 from ivy.ivy_bus import ivy_bus
@@ -139,6 +140,7 @@ class GraphicalView(tk.Tk):
                 "is_preview": True
             })
     
+    # the case to cancel the wall when draw
     def on_canvas_right_click_for_wall(self,event):
         if self.current_tool == "wall":
             ivy_bus.publish("cancal_to_draw_wall_request",{})
@@ -153,6 +155,28 @@ class GraphicalView(tk.Tk):
         ivy_bus.publish("floor_selected_request", {
             "floor_index": floor_index
         })
+
+    def on_floor_button_right_click(self,event,floor_index):
+        menu = tk.Menu(self,tearoff=0)
+
+        menu.add_command(
+            label="Rename",
+            command=lambda:self.on_rename_floor(floor_index)
+        )
+
+        menu.tk_popup(event.x_root,event.y_root)
+
+    def on_rename_floor(self,floor_index):
+        new_name=simpledialog.askstring(
+            title="Rename Floor",
+            prompt="Enter new floor name: "
+        )
+
+        if new_name:
+            ivy_bus.publish("rename_floor_request",{
+                "floor_index":floor_index,
+                "new_name": new_name 
+            })
 
     # ----------------------------- GET FROM CONTROLLER --------------------------------------------------------
     def on_draw_wall_update(self, data):
@@ -216,6 +240,8 @@ class GraphicalView(tk.Tk):
                     text=floor_name,
                     command=lambda idx=i: self.on_floor_button_click(idx)
                 )
+                # to rename the floor
+                btn.bind("<Button-3>",lambda e, idx=i:self.on_floor_button_right_click(e,idx))
             new_buttons.append(btn)
 
         self.floor_buttons = new_buttons

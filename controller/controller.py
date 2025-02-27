@@ -15,6 +15,7 @@ class Controller:
         ivy_bus.subscribe("floor_selected_request", self.handle_floor_selected_request)
         ivy_bus.subscribe("new_floor_request", self.handle_new_floor_request)
         ivy_bus.subscribe("tool_selected_request", self.handle_tool_selected_request)
+        ivy_bus.subscribe("rename_floor_request",self.handle_rename_floor_request)
 
         self.wall_start_point = None
         self.is_canceled_wall_draw = False
@@ -32,14 +33,9 @@ class Controller:
             return
 
         if is_click:
-            if(self.is_canceled_wall_draw == True):
-                self.is_canceled_wall_draw = False
-                self.wall_start_point = None
-                #return
-            print(f"[Controller] received draw_wall_request: the point of click=({x}, {y})")
+            #print(f"[Controller] received draw_wall_request: the point of click=({x}, {y})")
             if self.wall_start_point is None:
                 self.wall_start_point = (x, y)
-                print("First point is recorded (controller)")
 
             else:
                 start = self.wall_start_point
@@ -96,7 +92,7 @@ class Controller:
 
         ivy_bus.publish("clear_canvas_update", {})
 
-        # 2) told View to redraw all the walls      Il faut dire tous les objets apres
+        # told View to redraw all the walls      Il faut dire tous les objets apres iciiiiiiiiiiii
         for wall_obj in selected_floor.walls:
             ivy_bus.publish("draw_wall_update", {
                 "start": wall_obj.start,
@@ -153,4 +149,26 @@ class Controller:
 
         ivy_bus.publish("tool_selected_update", {
             "tool": tool
+        })
+
+    def handle_rename_floor_request(self,data):
+        """
+        when user need to rename the floor name
+        """
+        floor_index = data.get("floor_index")
+        new_name = data.get("new_name","")
+
+        if floor_index is None or not new_name.strip() or new_name == "":
+            ivy_bus.publish("show_alert_request",{
+                "title":"Floor name empty",
+                "message":"The floor must have a name"
+            })
+            return
+        
+        floor_obj = self.floors[floor_index]
+        floor_obj.name = new_name
+
+        ivy_bus.publish("new_floor_update", {
+        "floors": [f.name for f in self.floors],
+        "selected_floor_index": self.selected_floor_index
         })
