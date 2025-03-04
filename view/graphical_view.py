@@ -36,6 +36,7 @@ class GraphicalView(tk.Tk):
         ivy_bus.subscribe("tool_selected_update",     self.on_tool_selected_update)
         ivy_bus.subscribe("show_alert_request",       self.on_show_alert_request)
         ivy_bus.subscribe("clear_canvas_update",      self.on_clear_canvas_update)
+        ivy_bus.subscribe("draw_window_update",       self.on_draw_window_update)
 
     def _setup_style(self):
         style = ttk.Style(self)
@@ -92,9 +93,10 @@ class GraphicalView(tk.Tk):
 
         self.canvas = tk.Canvas(canvasFrame, bg="white")
         self.canvas.pack(fill=tk.BOTH, expand=True)
-        self.canvas.bind("<Button-1>", self.on_canvas_left_click_for_wall)
-        self.canvas.bind("<Button-3>", self.on_canvas_right_click_for_wall)
-        self.canvas.bind("<Motion>",   self.on_canvas_move_for_wall)
+        self.canvas.bind("<Button-1>", self.on_canvas_left_click)
+        #self.canvas.bind("<Button-1>", self.on_canvas_left_click_for_window)
+        self.canvas.bind("<Button-3>", self.on_canvas_right_click)
+        self.canvas.bind("<Motion>",   self.on_canvas_move)
 
         # line to seperate
         sep = ttk.Separator(mainFrame, orient="vertical")
@@ -124,26 +126,43 @@ class GraphicalView(tk.Tk):
         rightSpace.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     # --------------------------------- Handle events ------------------------------------------------
-    def on_canvas_left_click_for_wall(self, event):
+    def on_canvas_left_click(self, event):
         if self.current_tool == "wall":
             ivy_bus.publish("draw_wall_request", {
                 "x": event.x,
                 "y": event.y,
                 "is_click":True
             })
-    
-    def on_canvas_move_for_wall(self,event):
+        
+        if self.current_tool == "window":
+            ivy_bus.publish("draw_window_request",{
+                "x": event.x,
+                "y": event.y,
+                "is_click":True
+            })
+
+    def on_canvas_move(self,event):
         if self.current_tool == "wall":
             ivy_bus.publish("draw_wall_request",{
                 "x": event.x,
                 "y": event.y,
                 "is_preview": True
             })
+        
+        if self.current_tool == "window":
+            ivy_bus.publish("draw_window_request",{
+                "x": event.x,
+                "y": event.y,
+                "is_preview": True
+            })
     
     # the case to cancel the wall when draw
-    def on_canvas_right_click_for_wall(self,event):
+    def on_canvas_right_click(self,event):
         if self.current_tool == "wall":
             ivy_bus.publish("cancal_to_draw_wall_request",{})
+        if self.current_tool == "window":
+            ivy_bus.publish("cancal_to_draw_window_request",{})
+
 
     def on_new_floor_button_click(self):
         ivy_bus.publish("new_floor_request", {})
@@ -205,6 +224,30 @@ class GraphicalView(tk.Tk):
                 fill="black"
             )
         #self.canvas.create_line(start[0], start[1], end[0], end[1], fill=fill)
+
+    def on_draw_window_update(self,data):
+        start = data.get("start")
+        end   = data.get("end")
+        fill  = data.get("fill", "brown")
+        thickness = data.get("thickness")
+
+        if fill == "gray":
+            if hasattr(self,"temp_line"):
+                self.canvas.delete(self.temp_line)
+            self.temp_line = self.canvas.create_line(
+                start[0], start[1], end[0], end[1],
+                fill="gray", dash=(4, 2), width=thickness               
+            )
+        
+        else:
+            if hasattr(self, "temp_line"):
+                self.canvas.delete(self.temp_line)
+                del self.temp_line
+
+            self.canvas.create_line(
+                start[0], start[1], end[0], end[1],
+                fill="brown",width=thickness
+            )
 
     def on_floor_selected_update(self, data):
         """

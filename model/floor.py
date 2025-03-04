@@ -1,6 +1,7 @@
 class Floor:
     def __init__(self, name):
         self.name = name
+        self.objects = []
         self.walls = []
         self.doors = []
         self.windows = []
@@ -8,12 +9,15 @@ class Floor:
 
     def add_wall(self, wall):
         self.walls.append(wall)
+        self.objects.append(wall)
 
     def add_door(self, door):
         self.doors.append(door)
+        self.objects.append(door)
 
     def add_window(self, window):
         self.windows.append(window)
+        self.objects.append(window)
 
     def add_vent(self, vent):
         self.vents.append(vent)
