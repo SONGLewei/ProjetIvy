@@ -2,6 +2,7 @@ from ivy.ivy_bus import ivy_bus
 from model.wall import Wall
 from model.floor import Floor
 from model.window import Window
+from model.door import Door
 
 class Controller:
     def __init__(self):
@@ -19,12 +20,17 @@ class Controller:
         ivy_bus.subscribe("rename_floor_request",self.handle_rename_floor_request)
         ivy_bus.subscribe("draw_window_request", self.handle_draw_window_request)
         ivy_bus.subscribe("cancal_to_draw_window_request",self.handle_cancal_to_draw_window_request)
+        ivy_bus.subscribe("draw_door_request", self.handle_draw_door_request)
+        #ivy_bus.subscribe("cancal_to_draw_door_request",self.handle_cancal_to_draw_door_request)
 
         self.wall_start_point = None
         self.is_canceled_wall_draw = False
 
         self.window_start_point = None
         self.is_canceled_window_draw = False
+
+        self.door_start_point = None
+        self.is_canceled_door_draw = False
 
     def handle_draw_wall_request(self, data):
         x, y = data.get("x"), data.get("y")
@@ -135,7 +141,56 @@ class Controller:
         ivy_bus.publish("draw_window_update",{
             "start": (0, 0), "end": (0, 0), "fill": "gray"
         })
-        
+    
+    def handle_draw_door_request(self, data):
+        x, y = data.get("x"), data.get("y")
+        is_click = data.get("is_click", False)
+        is_preview = data.get("is_preview", False)
+
+        if self.selected_floor_index is None or self.current_tool != 'door':
+            return
+
+        if is_click:
+            if self.door_start_point is None:
+                self.door_start_point = (x, y)
+            else:
+                start = self.door_start_point
+                end = (x, y)
+
+                door_obj = Door(start, end, thickness=5)
+
+                current_floor = self.floors[self.selected_floor_index]
+                current_floor.add_door(door_obj)
+                print(f"in floor {current_floor.name} create door : {door_obj}")
+
+                ivy_bus.publish("draw_door_update", {
+                    "start": door_obj.start,
+                    "end": door_obj.end,
+                    "fill": "black",
+                    "thickness": door_obj.thickness,
+                })
+
+                self.door_start_point = None
+
+        elif is_preview:
+            if self.door_start_point is not None:
+                start = self.door_start_point
+                dx = abs(x - start[0])
+                dy = abs(y - start[1])
+
+                if dx >= dy:
+                    corrected_end = (x, start[1])
+                else:
+                    corrected_end = (start[0], y)
+
+                ivy_bus.publish("draw_door_update", {
+                    "start": start,
+                    "end": corrected_end,
+                    "fill":  "gray",
+                    "thickness": "5",
+                })
+                    
+                
 
     def handle_floor_selected_request(self, data):
 
