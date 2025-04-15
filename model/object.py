@@ -14,8 +14,8 @@ class Object(ABC):
 
     @abstractmethod
     def __repr__(self):
-        pass  # 让子类必须实现 __repr__
-
+        pass
+    
     def length(self):
         """
         Calculate the length of the object.

@@ -233,12 +233,20 @@ class GraphicalView(tk.Tk):
             
         if self.current_tool == "window":
             ivy_bus.publish("cancal_to_draw_window_request",{})
+        
+        if self.current_tool == "door":
+            ivy_bus.publish("cancal_to_draw_door_request",{})
 
     def on_new_floor_button_click(self):
         ivy_bus.publish("new_floor_request", {})
 
     def on_tool_button_click(self, tool):
-        ivy_bus.publish("tool_selected_request", {"tool": tool})
+        if tool == "vent":
+            ivy_bus.publish("tool_selected_request", {"tool": tool})
+            self.show_vent_type_menu()
+        else:
+            ivy_bus.publish("tool_selected_request", {"tool": tool})
+
 
     def on_floor_button_click(self, floor_index):
         ivy_bus.publish("floor_selected_request", {
@@ -266,6 +274,26 @@ class GraphicalView(tk.Tk):
                 "floor_index":floor_index,
                 "new_name": new_name 
             })
+    
+    def show_vent_type_menu(self):
+        menu = tk.Menu(self, tearoff=0)
+
+        vent_options = [
+        ("En rouge, extraction de l'air vicié",          "#ff0000", "extraction_interne"),
+        ("En orange, insufflation de l'air neuf",        "#ff9900", "insufflation_interne"),
+        ("En bleu foncé, extraction à l'extérieur",       "#003366", "extraction_externe"),
+        ("En bleu clair, admission d'air neuf extérieur", "#66ccff", "admission_externe"),
+        ]
+
+        for label, color, role in vent_options:
+            menu.add_command(
+                label=label,
+                background=color,
+                foreground="white",
+                command=lambda r=role, c=color: self.on_vent_type_selected(r, c)
+            )
+
+        menu.tk_popup(self.winfo_pointerx(), self.winfo_pointery())
 
     # ----------------------------- GET FROM CONTROLLER --------------------------------------------------------
     def on_draw_wall_update(self, data):

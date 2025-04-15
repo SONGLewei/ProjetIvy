@@ -21,7 +21,7 @@ class Controller:
         ivy_bus.subscribe("draw_window_request", self.handle_draw_window_request)
         ivy_bus.subscribe("cancal_to_draw_window_request",self.handle_cancal_to_draw_window_request)
         ivy_bus.subscribe("draw_door_request", self.handle_draw_door_request)
-        #ivy_bus.subscribe("cancal_to_draw_door_request",self.handle_cancal_to_draw_door_request)
+        ivy_bus.subscribe("cancal_to_draw_door_request",self.handle_cancal_to_draw_door_request)
 
         self.wall_start_point = None
         self.is_canceled_wall_draw = False
@@ -189,9 +189,16 @@ class Controller:
                     "fill":  "gray",
                     "thickness": "5",
                 })
+
+    def handle_cancal_to_draw_door_request(self, data):
+        self.is_canceled_door_draw = True
+        self.door_start_point = None
+        
+        ivy_bus.publish("draw_door_update",{
+            "start": (0, 0), "end": (0, 0), "fill": "gray"
+        })
                     
                 
-
     def handle_floor_selected_request(self, data):
 
         floor_idx = data.get("floor_index")
@@ -215,6 +222,14 @@ class Controller:
                 "end":   window_obj.end,
                 "fill":  "black",
                 "thickness": window_obj.thickness
+            })
+
+        for door_objet in selected_floor.doors:
+            ivy_bus.publish("draw_door_update", {
+                "start": door_objet.start,
+                "end":   door_objet.end,
+                "fill":  "black",
+                "thickness": door_objet.thickness
             })
 
         ivy_bus.publish("floor_selected_update", {
