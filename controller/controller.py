@@ -3,6 +3,7 @@ from model.wall import Wall
 from model.floor import Floor
 from model.window import Window
 from model.door import Door
+from model.vent import Vent
 
 class Controller:
     def __init__(self):
@@ -23,6 +24,12 @@ class Controller:
         ivy_bus.subscribe("draw_door_request", self.handle_draw_door_request)
         ivy_bus.subscribe("cancal_to_draw_door_request",self.handle_cancal_to_draw_door_request)
 
+        ivy_bus.subscribe("draw_vent_request",      self.handle_draw_vent_request)
+        ivy_bus.subscribe("cancal_to_draw_vent_request", self.handle_cancel_vent)
+        ivy_bus.subscribe("create_vent_request",    self.handle_create_vent_request)
+
+        ivy_bus.subscribe("delete_item_request", self.handle_delete_item_request)
+
         self.wall_start_point = None
         self.is_canceled_wall_draw = False
 
@@ -31,6 +38,16 @@ class Controller:
 
         self.door_start_point = None
         self.is_canceled_door_draw = False
+
+        self.vent_start_point = None
+        self.is_canceled_vent_draw = False
+        self.vent_role  = None
+        self.vent_color = None
+
+        self.temp_vent_start = None
+        self.temp_vent_end   = None
+        self.temp_vent_role  = None
+        self.temp_vent_color = None
 
     def handle_draw_wall_request(self, data):
         x, y = data.get("x"), data.get("y")
@@ -196,8 +213,82 @@ class Controller:
         
         ivy_bus.publish("draw_door_update",{
             "start": (0, 0), "end": (0, 0), "fill": "gray"
+        })   
+
+    def handle_draw_vent_request(self, data):
+        x, y       = data["x"], data["y"]
+        is_click   = data.get("is_click", False)
+        is_preview = data.get("is_preview", False)
+        role       = data.get("role")
+        color      = data.get("color", "#000")
+
+        if self.selected_floor_index is None or self.current_tool != "vent":
+            return
+
+        if is_click and self.vent_start_point is None:
+            self.vent_start_point = (x, y)
+            self.vent_role  = role
+            self.vent_color = color
+            return
+
+        if is_click and self.vent_start_point is not None:
+            start, end = self.vent_start_point, (x, y)
+            temp = Vent(start, end, "", "", "", role, color)
+
+            self.temp_vent_start = temp.start
+            self.temp_vent_end   = temp.end
+            self.temp_vent_role  = role
+            self.temp_vent_color = color
+
+            ivy_bus.publish("draw_vent_update", {
+                "start": temp.start, "end": temp.end,
+                "color": "gray"
+            })
+            ivy_bus.publish("vent_need_info_request", {
+                "start": temp.start, "end": temp.end,
+                "role":  role, "color": color
+            })
+
+            self.vent_start_point = None
+            self.vent_role = self.vent_color = None
+            return
+
+        if is_preview and self.vent_start_point:
+            temp = Vent(self.vent_start_point, (x, y), "", "", "", role, color)
+            ivy_bus.publish("draw_vent_update", {
+                "start": temp.start, "end": temp.end,
+                "color": "gray"
+            })
+
+    def handle_cancel_vent(self, data):
+        self.vent_start_point = None
+        self.temp_vent_start = self.temp_vent_end = None
+
+        ivy_bus.publish("draw_vent_update", {
+            "start": (0, 0), "end": (0, 0), "color": "gray"
         })
-                    
+
+    def handle_create_vent_request(self, data):
+        if self.temp_vent_start is None:
+            return
+
+        vent = Vent(self.temp_vent_start, self.temp_vent_end,
+                    data["name"], data["diameter"], data["flow"],
+                    self.temp_vent_role, self.temp_vent_color)
+
+        current_floor = self.floors[self.selected_floor_index]
+        current_floor.add_vent(vent)
+
+        ivy_bus.publish("draw_vent_update", {
+            "start": vent.start, "end": vent.end,
+            "color": vent.color,
+            "name":  vent.name,
+            "diameter": vent.diameter,
+            "flow": vent.flow_rate,
+            "role": vent.function
+        })
+
+        self.temp_vent_start = self.temp_vent_end = None
                 
     def handle_floor_selected_request(self, data):
 
@@ -230,6 +321,16 @@ class Controller:
                 "end":   door_objet.end,
                 "fill":  "black",
                 "thickness": door_objet.thickness
+            })
+
+        for v in selected_floor.vents:
+            ivy_bus.publish("draw_vent_update", {
+                "start": v.start, "end": v.end,
+                "color": v.color,
+                "name": v.name,
+                "diameter": v.diameter,
+                "flow": v.flow_rate,
+                "role": v.function
             })
 
         ivy_bus.publish("floor_selected_update", {
@@ -304,3 +405,26 @@ class Controller:
         "floors": [f.name for f in self.floors],
         "selected_floor_index": self.selected_floor_index
         })
+    
+    def handle_delete_item_request(self, data):
+        if self.selected_floor_index is None:
+            return
+
+        obj_type = data["type"]
+        x1, y1, x2, y2 = map(int, data["coords"])
+        start = (x1, y1)
+        end   = (x2, y2)
+
+        floor = self.floors[self.selected_floor_index]
+
+        def same_segment(o):
+            return ({o.start, o.end} == {start, end})
+
+        if obj_type == "wall":
+            floor.walls   = [w for w in floor.walls   if not same_segment(w)]
+        elif obj_type == "window":
+            floor.windows = [w for w in floor.windows if not same_segment(w)]
+        elif obj_type == "door":
+            floor.doors   = [d for d in floor.doors   if not same_segment(d)]
+        elif obj_type == "vent":
+            floor.vents   = [v for v in floor.vents   if not same_segment(v)]

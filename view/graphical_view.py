@@ -4,6 +4,7 @@ import tkinter.simpledialog as simpledialog
 from tkinter import ttk, PhotoImage
 from tkinter import messagebox
 from ivy.ivy_bus import ivy_bus
+from view.tooltip import Tooltip 
 
 class GraphicalView(tk.Tk):
     def __init__(self):
@@ -16,7 +17,14 @@ class GraphicalView(tk.Tk):
         self.current_floor = None
         self.floor_buttons = []
         self.current_tool = None
+        self.vent_role = None
+        self.vent_color = None
+        self.canvas_item_meta = {}
+        self.tooltip = Tooltip(self)
 
+        self.hover_after_id = None
+        self.current_hover_item = None 
+        
         self.colors = {
             "topbar_bg":    "#f4f4f4",
             "main_bg":      "#e8e8e8",
@@ -38,6 +46,8 @@ class GraphicalView(tk.Tk):
         ivy_bus.subscribe("clear_canvas_update",      self.on_clear_canvas_update)
         ivy_bus.subscribe("draw_window_update",       self.on_draw_window_update)
         ivy_bus.subscribe("draw_door_update",         self.on_draw_door_update)
+        ivy_bus.subscribe("vent_need_info_request", self.on_vent_need_info_request)
+        ivy_bus.subscribe("draw_vent_update",         self.on_draw_vent_update)
 
     def _setup_style(self):
         style = ttk.Style(self)
@@ -49,6 +59,7 @@ class GraphicalView(tk.Tk):
         base_path = os.path.dirname(os.path.abspath(__file__))
         icon_paths = {
             'select': os.path.join(base_path, 'photos', 'select.png'),
+            'eraser': os.path.join(base_path, 'photos', 'eraser.png'),
             'wall':   os.path.join(base_path, 'photos', 'wall.png'),
             'window': os.path.join(base_path, 'photos', 'window.png'),
             'door':   os.path.join(base_path, 'photos', 'door1.png'),
@@ -98,6 +109,7 @@ class GraphicalView(tk.Tk):
         #self.canvas.bind("<Button-1>", self.on_canvas_left_click_for_window)
         self.canvas.bind("<Button-3>", self.on_canvas_right_click)
         self.canvas.bind("<Motion>",   self.on_canvas_move)
+        self.canvas.bind("<Leave>", self.on_canvas_leave)
 
         self._create_compass_layer(canvasFrame)
 
@@ -173,7 +185,7 @@ class GraphicalView(tk.Tk):
         iconFrame = tk.Frame(toolbarFrame, bg=self.colors["toolbar_bg"])
         iconFrame.pack(side=tk.LEFT)
 
-        for t in ['select', 'wall', 'window', 'door', 'vent']:
+        for t in ['select','eraser', 'wall', 'window', 'door', 'vent']:
             ttk.Button(iconFrame,
                        image=self.icons.get(t),
                        command=lambda tool=t: self.on_tool_button_click(tool)
@@ -204,6 +216,37 @@ class GraphicalView(tk.Tk):
                 "y": event.y,
                 "is_click":True
             })
+        
+        if self.current_tool == "vent":
+            if not self.vent_role:
+                self.on_show_alert_request({
+                    "title": "Vent type not selected",
+                    "message": "Please choose a vent type first."
+                })
+                return
+            ivy_bus.publish("draw_vent_request", {
+                "x": event.x, "y": event.y,
+                "is_click": True,
+                "role":  self.vent_role,
+                "color": self.vent_color
+            })
+        if self.current_tool == "eraser":
+            items = self.canvas.find_overlapping(event.x, event.y, event.x, event.y)
+            if not items:
+                return
+            item = items[-1]
+            tags = self.canvas.gettags(item)
+            if not tags:
+                return
+
+            obj_type = tags[0]
+            coords = self.canvas.coords(item)
+            self.canvas.delete(item)
+
+            ivy_bus.publish("delete_item_request", {
+                "type": obj_type,
+                "coords": coords
+            })
 
     def on_canvas_move(self,event):
         if self.current_tool == "wall":
@@ -225,7 +268,17 @@ class GraphicalView(tk.Tk):
                 "y": event.y,
                 "is_preview": True
             })
-    
+        
+        if self.current_tool == "vent" and self.vent_role:
+            ivy_bus.publish("draw_vent_request", {
+                "x": event.x, "y": event.y,
+                "is_preview": True,
+                "role":  self.vent_role,
+                "color": self.vent_color
+            })
+        
+        self._handle_hover(event)
+
     # the case to cancel the wall when draw
     def on_canvas_right_click(self,event):
         if self.current_tool == "wall":
@@ -236,6 +289,9 @@ class GraphicalView(tk.Tk):
         
         if self.current_tool == "door":
             ivy_bus.publish("cancal_to_draw_door_request",{})
+        
+        if self.current_tool == "vent":
+            ivy_bus.publish("cancal_to_draw_vent_request", {})
 
     def on_new_floor_button_click(self):
         ivy_bus.publish("new_floor_request", {})
@@ -295,6 +351,10 @@ class GraphicalView(tk.Tk):
 
         menu.tk_popup(self.winfo_pointerx(), self.winfo_pointery())
 
+    def on_vent_type_selected(self,role,color):
+        self.vent_role = role
+        self.vent_color = color
+
     # ----------------------------- GET FROM CONTROLLER --------------------------------------------------------
     def on_draw_wall_update(self, data):
         """
@@ -317,9 +377,9 @@ class GraphicalView(tk.Tk):
                 self.canvas.delete(self.temp_line)
                 del self.temp_line
 
-            self.canvas.create_line(
+            item = self.canvas.create_line(
                 start[0], start[1], end[0], end[1],
-                fill="black",width=6
+                fill="black",width=6,tags=("wall",)
             )
         #self.canvas.create_line(start[0], start[1], end[0], end[1], fill=fill)
 
@@ -342,9 +402,9 @@ class GraphicalView(tk.Tk):
                 self.canvas.delete(self.temp_line)
                 del self.temp_line
 
-            self.canvas.create_line(
+            item = self.canvas.create_line(
                 start[0], start[1], end[0], end[1],
-                fill="blue",width=thickness
+                fill="blue",width=thickness, tags=("window",)
             )
     
     def on_draw_door_update(self,data):
@@ -366,10 +426,60 @@ class GraphicalView(tk.Tk):
                 self.canvas.delete(self.temp_line)
                 del self.temp_line
 
-            self.canvas.create_line(
+            item = self.canvas.create_line(
                 start[0], start[1], end[0], end[1],
-                fill="brown",width=thickness
+                fill="brown",width=thickness,tags=("door",)
             )
+
+    def on_draw_vent_update(self, data):
+        start, end = data["start"], data["end"]
+        color      = data.get("color", "gray")
+
+        if color == "gray":
+            if hasattr(self, "temp_vent"):
+                self.canvas.delete(self.temp_vent)
+            self.temp_vent = self.canvas.create_line(
+                start[0], start[1], end[0], end[1],
+                fill="gray", dash=(4, 2), width=4
+            )
+        else:
+            if hasattr(self, "temp_vent"):
+                self.canvas.delete(self.temp_vent)
+                del self.temp_vent
+            item = self.canvas.create_line(
+                start[0], start[1], end[0], end[1],
+                fill=color, width=4, tags=("vent",)
+            )
+            meta = (f"{data.get('name','')}\n"
+                    f"Ø {data.get('diameter','')} mm\n"
+                    f"{data.get('flow','')} m³/h\n"
+                    f"{data.get('role','')}")
+            self.canvas_item_meta[item] = meta
+    
+    def on_vent_need_info_request(self, data):
+        start, end = data["start"], data["end"]
+        role, color = data["role"], data["color"]
+
+        name = simpledialog.askstring("Vent name", "Enter vent name:")
+        if not name:
+            ivy_bus.publish("cancal_to_draw_vent_request", {})
+            return
+
+        diameter = simpledialog.askstring("Diameter (mm)", "Enter vent diameter (mm):")
+        if diameter is None:
+            ivy_bus.publish("cancal_to_draw_vent_request", {})
+            return
+
+        flow = simpledialog.askstring("Flow rate (m³/h)", "Enter flow rate (m³/h):")
+        if flow is None:
+            ivy_bus.publish("cancal_to_draw_vent_request", {})
+            return
+
+        ivy_bus.publish("create_vent_request", {
+            "start": start, "end": end,
+            "name": name, "diameter": diameter, "flow": flow,
+            "role": role, "color": color
+        })
 
     def on_floor_selected_update(self, data):
         """
@@ -428,10 +538,6 @@ class GraphicalView(tk.Tk):
 
 
     def on_show_alert_request(self, data):
-        """
-        处理 Controller 发送的 show_alert_request 事件，
-        弹出 tkinter 提示框提醒用户需要先创建楼层。
-        """
         title = data.get("title", "Alert")
         message = data.get("message", "Something went wrong.")
 
@@ -439,3 +545,32 @@ class GraphicalView(tk.Tk):
 
     def on_clear_canvas_update(self, data):
         self.canvas.delete("all")
+    
+    def _schedule_hover(self, item, x_root, y_root):
+        if item == self.current_hover_item:
+            return
+        self._cancel_hover()
+        self.current_hover_item = item
+        if item in self.canvas_item_meta:
+            self.hover_after_id = self.after(
+                1000,
+                lambda: self.tooltip.show(self.canvas_item_meta[item], x_root, y_root)
+            )
+    
+    def _cancel_hover(self):
+        if self.hover_after_id is not None:
+            self.after_cancel(self.hover_after_id)
+            self.hover_after_id = None
+        self.tooltip.hide()
+        self.current_hover_item = None
+
+    def _handle_hover(self, event):
+        items = self.canvas.find_overlapping(event.x, event.y, event.x, event.y)
+        vent_item = next((i for i in items if i in self.canvas_item_meta), None)
+        if vent_item:
+            self._schedule_hover(vent_item, event.x_root + 10, event.y_root + 10)
+        else:
+            self._cancel_hover()
+
+    def on_canvas_leave(self, event):
+        self._cancel_hover()
