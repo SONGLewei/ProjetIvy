@@ -6,6 +6,7 @@ class Floor:
         self.doors = []
         self.windows = []
         self.vents = []
+        self.height = 2.5
 
     def add_wall(self, wall):
         self.walls.append(wall)
@@ -21,6 +22,9 @@ class Floor:
 
     def add_vent(self, vent):
         self.vents.append(vent)
+    
+    def set_height(self, value: float):
+        self.height = value
 
     def __repr__(self):
         return (f"<Floor '{self.name}' | "

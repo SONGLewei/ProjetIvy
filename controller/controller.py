@@ -29,6 +29,7 @@ class Controller:
         ivy_bus.subscribe("create_vent_request",    self.handle_create_vent_request)
 
         ivy_bus.subscribe("delete_item_request", self.handle_delete_item_request)
+        ivy_bus.subscribe("set_floor_height_request", self.handle_set_floor_height_request)
 
         self.wall_start_point = None
         self.is_canceled_wall_draw = False
@@ -127,7 +128,7 @@ class Controller:
                 ivy_bus.publish("draw_window_update", {
                     "start": window_obj.start,
                     "end":   window_obj.end,
-                    "fill":  "black",
+                    "fill":  "#EE82EE",
                     "thickness": window_obj.thickness,
                 })
 
@@ -183,7 +184,7 @@ class Controller:
                 ivy_bus.publish("draw_door_update", {
                     "start": door_obj.start,
                     "end": door_obj.end,
-                    "fill": "black",
+                    "fill": "#8B4513",
                     "thickness": door_obj.thickness,
                 })
 
@@ -337,6 +338,8 @@ class Controller:
             "selected_floor_index": floor_idx,
             "floor_name": selected_floor.name
         })
+
+        self._publish_height(selected_floor)
         
     def handle_new_floor_request(self, data):
         """
@@ -345,7 +348,7 @@ class Controller:
         Clear automatic the canvas
         """
         ivy_bus.publish("clear_canvas_update", {})
-        new_floor_name = f"Floor {len(self.floors) + 1}"
+        new_floor_name = f"Floor {len(self.floors)}"
         new_floor = Floor(new_floor_name)
 
         if self.selected_floor_index is None:
@@ -363,6 +366,8 @@ class Controller:
             "floors": [f.name for f in self.floors],
             "selected_floor_index": self.selected_floor_index
         })
+
+        self._publish_height(new_floor)
 
     def handle_tool_selected_request(self, data):
         """
@@ -428,3 +433,14 @@ class Controller:
             floor.doors   = [d for d in floor.doors   if not same_segment(d)]
         elif obj_type == "vent":
             floor.vents   = [v for v in floor.vents   if not same_segment(v)]
+    
+    def _publish_height(self, floor):
+        ivy_bus.publish("floor_height_update", {"height": floor.height})
+
+    def handle_set_floor_height_request(self, data):
+        idx    = data["floor_index"]
+        height = data["height"]
+        if 0 <= idx < len(self.floors):
+            self.floors[idx].set_height(height)
+            if idx == self.selected_floor_index:
+                self._publish_height(self.floors[idx])

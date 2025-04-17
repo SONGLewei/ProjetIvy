@@ -24,6 +24,10 @@ class GraphicalView(tk.Tk):
 
         self.hover_after_id = None
         self.current_hover_item = None 
+        self.height_text_id = None
+        self.current_floor_height = None
+
+        
         
         self.colors = {
             "topbar_bg":    "#f4f4f4",
@@ -37,6 +41,8 @@ class GraphicalView(tk.Tk):
         self._setup_style()
         self._create_layout()
 
+        self.bind("<Configure>", self._on_window_configure)
+
         # subscribe the update events from controller
         ivy_bus.subscribe("draw_wall_update",         self.on_draw_wall_update)
         ivy_bus.subscribe("floor_selected_update",    self.on_floor_selected_update)
@@ -46,8 +52,9 @@ class GraphicalView(tk.Tk):
         ivy_bus.subscribe("clear_canvas_update",      self.on_clear_canvas_update)
         ivy_bus.subscribe("draw_window_update",       self.on_draw_window_update)
         ivy_bus.subscribe("draw_door_update",         self.on_draw_door_update)
-        ivy_bus.subscribe("vent_need_info_request", self.on_vent_need_info_request)
+        ivy_bus.subscribe("vent_need_info_request",   self.on_vent_need_info_request)
         ivy_bus.subscribe("draw_vent_update",         self.on_draw_vent_update)
+        ivy_bus.subscribe("floor_height_update",      self.on_floor_height_update)
 
     def _setup_style(self):
         style = ttk.Style(self)
@@ -100,26 +107,69 @@ class GraphicalView(tk.Tk):
         mainFrame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         # left part
-        canvasFrame = tk.Frame(mainFrame, bg=self.colors["canvas_bg"])
-        canvasFrame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=20, pady=20)
+        drawWrap = tk.Frame(mainFrame, bg=self.colors["canvas_bg"])
+        drawWrap.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=20, pady=20)
 
-        self.canvas = tk.Canvas(canvasFrame, bg="white")
-        self.canvas.pack(fill=tk.BOTH, expand=True)
+        vbar = ttk.Scrollbar(drawWrap, orient="vertical")
+        hbar = ttk.Scrollbar(drawWrap, orient="horizontal")
+        vbar.pack(side=tk.RIGHT, fill=tk.Y)
+        hbar.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.canvas = tk.Canvas(
+            drawWrap, bg="white", highlightthickness=0,
+            xscrollcommand=hbar.set, yscrollcommand=vbar.set
+        )
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        def _on_canvas_configure(evt):
+            self.canvas.configure(scrollregion=self.canvas.bbox("all") or (0, 0, 0, 0))
+            self._redraw_height_text()
+
+        self.canvas.bind("<Configure>", _on_canvas_configure)
+
+        vbar.config(command=self.canvas.yview)
+        hbar.config(command=self.canvas.xview)
+
+
         self.canvas.bind("<Button-1>", self.on_canvas_left_click)
-        #self.canvas.bind("<Button-1>", self.on_canvas_left_click_for_window)
         self.canvas.bind("<Button-3>", self.on_canvas_right_click)
         self.canvas.bind("<Motion>",   self.on_canvas_move)
         self.canvas.bind("<Leave>", self.on_canvas_leave)
 
-        self._create_compass_layer(canvasFrame)
+        #self._create_compass_layer(canvasFrame)
+        self._create_compass_layer(drawWrap)
 
         # line to seperate
         sep = ttk.Separator(mainFrame, orient="vertical")
         sep.pack(side=tk.RIGHT, fill=tk.Y, pady=20)
 
-        # right
-        self.floorFrame = tk.Frame(mainFrame, bg=self.colors["main_bg"], width=150)
-        self.floorFrame.pack(side=tk.RIGHT, fill=tk.Y, padx=20, pady=20)
+        scrollWrap = tk.Frame(mainFrame, bg=self.colors["main_bg"])
+        scrollWrap.pack(side=tk.RIGHT, fill=tk.Y, padx=20, pady=20)
+
+        self.floorCanvas = tk.Canvas(
+            scrollWrap, bg=self.colors["main_bg"], highlightthickness=0, width=130
+        )
+        vsb = ttk.Scrollbar(scrollWrap, orient="vertical", command=self.floorCanvas.yview)
+        self.floorCanvas.configure(yscrollcommand=vsb.set)
+
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.floorCanvas.pack(side=tk.LEFT, fill=tk.Y, expand=True)
+
+        self.floorFrame = tk.Frame(self.floorCanvas, bg=self.colors["main_bg"])
+        self.floorCanvas.create_window((0, 0), window=self.floorFrame, anchor="nw")
+
+        self.floorFrame.bind(
+            "<Configure>",
+            lambda e: self.floorCanvas.configure(scrollregion=self.floorCanvas.bbox("all"))
+        )
+
+        def _on_mousewheel(event):
+            self.floorCanvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        # Windows / Linux
+        self.floorCanvas.bind_all("<MouseWheel>",   _on_mousewheel)
+        # macOS
+        self.floorCanvas.bind_all("<Button-4>", _on_mousewheel)
+        self.floorCanvas.bind_all("<Button-5>", _on_mousewheel)
 
     def _create_compass_layer(self, parent_frame):
         self.compass_canvas = tk.Canvas(parent_frame, width=80, height=120,
@@ -170,7 +220,7 @@ class GraphicalView(tk.Tk):
         )
 
         self.compass_canvas.create_text(
-            center_x, line_y - 10,
+            center_x, line_y - 8,
             text="2m", font=("Helvetica", 9, "bold"),
             fill='black'
         )
@@ -317,6 +367,11 @@ class GraphicalView(tk.Tk):
             command=lambda:self.on_rename_floor(floor_index)
         )
 
+        menu.add_command(
+            label="Definie the height",
+            command=lambda: self.on_set_height(floor_index)
+        )
+
         menu.tk_popup(event.x_root,event.y_root)
 
     def on_rename_floor(self,floor_index):
@@ -362,7 +417,7 @@ class GraphicalView(tk.Tk):
         """
         start = data.get("start")
         end   = data.get("end")
-        fill  = data.get("fill", "black")
+        fill  = data.get("fill")
 
         if fill == "gray":
             if hasattr(self,"temp_line"):
@@ -379,14 +434,16 @@ class GraphicalView(tk.Tk):
 
             item = self.canvas.create_line(
                 start[0], start[1], end[0], end[1],
-                fill="black",width=6,tags=("wall",)
+                fill=fill ,width=6,tags=("wall",)
             )
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        
         #self.canvas.create_line(start[0], start[1], end[0], end[1], fill=fill)
 
     def on_draw_window_update(self,data):
         start = data.get("start")
         end   = data.get("end")
-        fill  = data.get("fill", "brown")
+        fill  = data.get("fill")
         thickness = data.get("thickness")
 
         if fill == "gray":
@@ -404,13 +461,14 @@ class GraphicalView(tk.Tk):
 
             item = self.canvas.create_line(
                 start[0], start[1], end[0], end[1],
-                fill="blue",width=thickness, tags=("window",)
+                fill=fill ,width=thickness, tags=("window",)
             )
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
     
     def on_draw_door_update(self,data):
         start = data.get("start")
         end   = data.get("end")
-        fill  = data.get("fill", "brown")
+        fill  = data.get("fill")
         thickness = data.get("thickness")
         
         if fill == "gray":
@@ -428,8 +486,9 @@ class GraphicalView(tk.Tk):
 
             item = self.canvas.create_line(
                 start[0], start[1], end[0], end[1],
-                fill="brown",width=thickness,tags=("door",)
+                fill=fill,width=thickness,tags=("door",)
             )
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def on_draw_vent_update(self, data):
         start, end = data["start"], data["end"]
@@ -450,6 +509,7 @@ class GraphicalView(tk.Tk):
                 start[0], start[1], end[0], end[1],
                 fill=color, width=4, tags=("vent",)
             )
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
             meta = (f"{data.get('name','')}\n"
                     f"Ø {data.get('diameter','')} mm\n"
                     f"{data.get('flow','')} m³/h\n"
@@ -545,6 +605,13 @@ class GraphicalView(tk.Tk):
 
     def on_clear_canvas_update(self, data):
         self.canvas.delete("all")
+        if self.height_text_id:
+            self.canvas.delete(self.height_text_id)
+            self.height_text_id = None
+        self.current_floor_height = None
+        self.canvas.configure(scrollregion=(0, 0, self.canvas.winfo_width(), self.canvas.winfo_height()))
+        self.canvas.xview_moveto(0)
+        self.canvas.yview_moveto(0)
     
     def _schedule_hover(self, item, x_root, y_root):
         if item == self.current_hover_item:
@@ -574,3 +641,45 @@ class GraphicalView(tk.Tk):
 
     def on_canvas_leave(self, event):
         self._cancel_hover()
+    
+    def on_set_height(self, floor_index):
+        value = simpledialog.askstring(
+            "Higit of this floor ",
+            "Enter the hight of this floor (m) :",
+            parent=self
+        )
+        if value:
+            try:
+                h = float(value.replace(",", "."))
+                ivy_bus.publish("set_floor_height_request", {
+                    "floor_index": floor_index,
+                    "height": h
+                })
+            except ValueError:
+                self.on_show_alert_request({
+                    "title": "Value incorrect",
+                    "message": "Please enter a valid number "
+                })
+
+    def on_floor_height_update(self, data):
+        self.current_floor_height = data["height"]
+        self._redraw_height_text()
+
+    def _on_window_configure(self, event):
+        if event.widget is self:
+            self._redraw_height_text()
+    
+    def _redraw_height_text(self):
+        if self.current_floor_height is None:
+            return
+        if self.height_text_id:
+            self.canvas.delete(self.height_text_id)
+
+        x_visible = self.canvas.canvasx(self.canvas.winfo_width()) - 10
+        y_visible = self.canvas.canvasy(self.canvas.winfo_height()) - 10
+        txt = f"The height of this floor is : {self.current_floor_height} m"
+        self.height_text_id = self.canvas.create_text(
+             x_visible, y_visible,
+            anchor="se", text=txt,
+            font=("Helvetica", 10, "italic"), fill="#444"
+        )
