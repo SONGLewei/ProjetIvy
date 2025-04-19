@@ -21,6 +21,8 @@ class GraphicalView(tk.Tk):
         self.vent_color = None
         self.canvas_item_meta = {}
         self.tooltip = Tooltip(self)
+        self.tooltips = []  # For storing button tooltips
+        self.vent_tooltips = {}  # For storing vent tooltips by canvas item ID
 
         self.hover_after_id = None
         self.current_hover_item = None 
@@ -242,25 +244,32 @@ class GraphicalView(tk.Tk):
         iconFrame = tk.Frame(toolbarFrame, bg=self.colors["toolbar_bg"])
         iconFrame.pack(side=tk.LEFT)
 
-        # Tool names in French
-        tool_names = {
-            'select': 'Sélection',
-            'eraser': 'Gomme',
-            'wall': 'Mur',
-            'window': 'Fenêtre',
-            'door': 'Porte',
-            'vent': 'Ventilation'
-        }
+        # Tool names in French (direct constant strings for better reliability)
+        tool_buttons = [
+            ('select', 'Sélection'),
+            ('eraser', 'Gomme'),
+            ('wall', 'Mur'),
+            ('window', 'Fenêtre'),
+            ('door', 'Porte'),
+            ('vent', 'Ventilation')
+        ]
 
-        for t in ['select','eraser', 'wall', 'window', 'door', 'vent']:
-            btn = ttk.Button(iconFrame,
-                       image=self.icons.get(t),
-                       command=lambda tool=t: self.on_tool_button_click(tool)
-                       )
+        # Create buttons with tooltips
+        for tool_id, tooltip_text in tool_buttons:
+            # Create the button
+            btn = ttk.Button(
+                iconFrame,
+                image=self.icons.get(tool_id),
+                command=lambda tool=tool_id: self.on_tool_button_click(tool)
+            )
             btn.pack(side=tk.LEFT, padx=10, pady=5)
             
-            # Create tooltip for each button
-            Tooltip(self, btn, tool_names.get(t, t))
+            # Create tooltip - explicit instance creation
+            tooltip = Tooltip(self)
+            tooltip._attach_to_widget(btn, tooltip_text)
+            
+            # Store tooltip reference to prevent garbage collection
+            self.tooltips.append(tooltip)
 
         rightSpace = tk.Label(toolbarFrame, bg=self.colors["toolbar_bg"])
         rightSpace.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -541,12 +550,26 @@ class GraphicalView(tk.Tk):
                 fill=color, width=4, tags=("vent",)
             )
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-            meta = (f"{data.get('name','')}\n"
-                    f"Ø {data.get('diameter','')} mm\n"
-                    f"{data.get('flow','')} m³/h\n"
-                    f"{data.get('role','')}")
-            self.canvas_item_meta[item] = meta
-    
+            
+            # Create well-formatted tooltip content with explicit strings
+            name = data.get('name', '')
+            diameter = data.get('diameter', '')
+            flow = data.get('flow', '')
+            role = data.get('role', '')
+            
+            meta = f"{name}\nØ {diameter} mm\n{flow} m³/h\n{role}"
+            
+            # Ensure meta data is not empty
+            if meta and meta.strip():
+                # Store both formatted text and individual components
+                self.canvas_item_meta[item] = {
+                    'text': meta,
+                    'name': name,
+                    'diameter': diameter,
+                    'flow': flow,
+                    'role': role
+                }
+
     def on_vent_need_info_request(self, data):
         start, end = data["start"], data["end"]
         role, color = data["role"], data["color"]
@@ -699,29 +722,61 @@ class GraphicalView(tk.Tk):
         self.canvas.yview_moveto(0)
     
     def _schedule_hover(self, item, x_root, y_root):
+        """Schedule showing a tooltip for an item after a delay"""
         if item == self.current_hover_item:
             return
+            
         self._cancel_hover()
         self.current_hover_item = item
+        
         if item in self.canvas_item_meta:
-            self.hover_after_id = self.after(
-                1000,
-                lambda: self.tooltip.show(self.canvas_item_meta[item], x_root, y_root)
-            )
+            # Create a dedicated tooltip for this vent if it doesn't exist
+            if item not in self.vent_tooltips:
+                self.vent_tooltips[item] = Tooltip(self)
+            
+            # Get tooltip data
+            meta_data = self.canvas_item_meta[item]
+            tooltip_text = meta_data['text'] if isinstance(meta_data, dict) else meta_data
+            
+            # Schedule showing this vent's tooltip
+            if tooltip_text and tooltip_text.strip():
+                self.hover_after_id = self.after(
+                    1000,
+                    lambda: self.vent_tooltips[item].show(tooltip_text, x_root, y_root)
+                )
     
     def _cancel_hover(self):
+        """Cancel any pending hover tooltip"""
         if self.hover_after_id is not None:
             self.after_cancel(self.hover_after_id)
             self.hover_after_id = None
+            
+        # Hide all tooltips
+        for tooltip in self.vent_tooltips.values():
+            tooltip.hide()
+            
         self.tooltip.hide()
         self.current_hover_item = None
 
     def _handle_hover(self, event):
-        items = self.canvas.find_overlapping(event.x, event.y, event.x, event.y)
-        vent_item = next((i for i in items if i in self.canvas_item_meta), None)
-        if vent_item:
-            self._schedule_hover(vent_item, event.x_root + 10, event.y_root + 10)
-        else:
+        """Handle mouse hover events on the canvas"""
+        # Only process hover events if we have canvas items
+        if not hasattr(self, "canvas") or not self.canvas:
+            return
+            
+        # Find items under the cursor
+        try:
+            items = self.canvas.find_overlapping(event.x, event.y, event.x, event.y)
+            # Find the first item that has metadata (for tooltip)
+            vent_item = next((i for i in items if i in self.canvas_item_meta), None)
+            
+            if vent_item:
+                self._schedule_hover(vent_item, event.x_root + 10, event.y_root + 10)
+            else:
+                self._cancel_hover()
+        except Exception as e:
+            # Handle any errors that might occur during hover detection
+            print(f"Error handling hover: {e}")
             self._cancel_hover()
 
     def on_canvas_leave(self, event):
