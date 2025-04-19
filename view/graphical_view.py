@@ -43,7 +43,7 @@ class GraphicalView(tk.Tk):
 
         self.bind("<Configure>", self._on_window_configure)
 
-        # subscribe the update events from controller
+        # Subscribe to events from controller
         ivy_bus.subscribe("draw_wall_update",         self.on_draw_wall_update)
         ivy_bus.subscribe("floor_selected_update",    self.on_floor_selected_update)
         ivy_bus.subscribe("new_floor_update",         self.on_new_floor_update)
@@ -55,6 +55,9 @@ class GraphicalView(tk.Tk):
         ivy_bus.subscribe("vent_need_info_request",   self.on_vent_need_info_request)
         ivy_bus.subscribe("draw_vent_update",         self.on_draw_vent_update)
         ivy_bus.subscribe("floor_height_update",      self.on_floor_height_update)
+        
+        # Request the initial floor information from the controller
+        self.after(100, self._request_initial_floor)
 
     def _setup_style(self):
         style = ttk.Style(self)
@@ -683,3 +686,6 @@ class GraphicalView(tk.Tk):
             anchor="se", text=txt,
             font=("Helvetica", 10, "italic"), fill="#444"
         )
+
+    def _request_initial_floor(self):
+        ivy_bus.publish("floor_selected_request", {"floor_index": 0})

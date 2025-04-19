@@ -11,7 +11,12 @@ class Controller:
         self.selected_floor_index = None
         self.current_tool = 'select'
         self.floor_count = 0
-
+        
+        # Create default Floor 0
+        default_floor = Floor("Floor 0")
+        self.floors.append(default_floor)
+        self.selected_floor_index = 0
+        
         # Subscribe the events that UI has published
         ivy_bus.subscribe("draw_wall_request", self.handle_draw_wall_request)
         ivy_bus.subscribe("cancal_to_draw_wall_request",self.handle_cancal_to_draw_wall_request)
@@ -49,6 +54,9 @@ class Controller:
         self.temp_vent_end   = None
         self.temp_vent_role  = None
         self.temp_vent_color = None
+        
+        # Initialize floor height
+        self._publish_height(default_floor)
 
     def handle_draw_wall_request(self, data):
         x, y = data.get("x"), data.get("y")
@@ -292,54 +300,62 @@ class Controller:
         self.temp_vent_start = self.temp_vent_end = None
                 
     def handle_floor_selected_request(self, data):
-
         floor_idx = data.get("floor_index")
-        self.selected_floor_index = floor_idx
-        selected_floor = self.floors[floor_idx]
-        print(f"[Controller] the floor is chosen now : {selected_floor.name} (index={floor_idx})")
+        
+        # Check if floor index is valid
+        if floor_idx is not None and 0 <= floor_idx < len(self.floors):
+            self.selected_floor_index = floor_idx
+            selected_floor = self.floors[floor_idx]
+            print(f"[Controller] the floor is chosen now : {selected_floor.name} (index={floor_idx})")
 
-        ivy_bus.publish("clear_canvas_update", {})
+            ivy_bus.publish("clear_canvas_update", {})
 
-        # told View to redraw all the walls      Il faut dire tous les objets apres iciiiiiiiiiiii
-        for wall_obj in selected_floor.walls:
-            ivy_bus.publish("draw_wall_update", {
-                "start": wall_obj.start,
-                "end":   wall_obj.end,
-                "fill":  "black",
+            # told View to redraw all the walls      Il faut dire tous les objets apres iciiiiiiiiiiii
+            for wall_obj in selected_floor.walls:
+                ivy_bus.publish("draw_wall_update", {
+                    "start": wall_obj.start,
+                    "end":   wall_obj.end,
+                    "fill":  "black",
+                })
+
+            for window_obj in selected_floor.windows:
+                ivy_bus.publish("draw_window_update", {
+                    "start": window_obj.start,
+                    "end":   window_obj.end,
+                    "fill":  "black",
+                    "thickness": window_obj.thickness
+                })
+
+            for door_objet in selected_floor.doors:
+                ivy_bus.publish("draw_door_update", {
+                    "start": door_objet.start,
+                    "end":   door_objet.end,
+                    "fill":  "black",
+                    "thickness": door_objet.thickness
+                })
+
+            for v in selected_floor.vents:
+                ivy_bus.publish("draw_vent_update", {
+                    "start": v.start, "end": v.end,
+                    "color": v.color,
+                    "name": v.name,
+                    "diameter": v.diameter,
+                    "flow": v.flow_rate,
+                    "role": v.function
+                })
+
+            ivy_bus.publish("floor_selected_update", {
+                "selected_floor_index": floor_idx,
+                "floor_name": selected_floor.name
+            })
+            
+            # If this is the initial floor selection, also send the floor list
+            ivy_bus.publish("new_floor_update", {
+                "floors": [f.name for f in self.floors],
+                "selected_floor_index": self.selected_floor_index
             })
 
-        for window_obj in selected_floor.windows:
-            ivy_bus.publish("draw_window_update", {
-                "start": window_obj.start,
-                "end":   window_obj.end,
-                "fill":  "black",
-                "thickness": window_obj.thickness
-            })
-
-        for door_objet in selected_floor.doors:
-            ivy_bus.publish("draw_door_update", {
-                "start": door_objet.start,
-                "end":   door_objet.end,
-                "fill":  "black",
-                "thickness": door_objet.thickness
-            })
-
-        for v in selected_floor.vents:
-            ivy_bus.publish("draw_vent_update", {
-                "start": v.start, "end": v.end,
-                "color": v.color,
-                "name": v.name,
-                "diameter": v.diameter,
-                "flow": v.flow_rate,
-                "role": v.function
-            })
-
-        ivy_bus.publish("floor_selected_update", {
-            "selected_floor_index": floor_idx,
-            "floor_name": selected_floor.name
-        })
-
-        self._publish_height(selected_floor)
+            self._publish_height(selected_floor)
         
     def handle_new_floor_request(self, data):
         """
