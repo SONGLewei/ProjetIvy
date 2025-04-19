@@ -374,9 +374,16 @@ class GraphicalView(tk.Tk):
             label="Definie the height",
             command=lambda: self.on_set_height(floor_index)
         )
+        
+        menu.add_separator()
+        
+        menu.add_command(
+            label="Delete",
+            command=lambda: self.on_delete_floor(floor_index)
+        )
 
         menu.tk_popup(event.x_root,event.y_root)
-
+        
     def on_rename_floor(self,floor_index):
         new_name=simpledialog.askstring(
             title="Rename Floor",
@@ -689,3 +696,15 @@ class GraphicalView(tk.Tk):
 
     def _request_initial_floor(self):
         ivy_bus.publish("floor_selected_request", {"floor_index": 0})
+
+    def on_delete_floor(self, floor_index):
+        result = messagebox.askyesno(
+            "Confirm Deletion",
+            f"Are you sure you want to delete this floor?\nAll elements on this floor will be lost.",
+            icon='warning'
+        )
+        
+        if result:
+            ivy_bus.publish("delete_floor_request", {
+                "floor_index": floor_index
+            })

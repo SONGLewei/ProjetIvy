@@ -35,6 +35,7 @@ class Controller:
 
         ivy_bus.subscribe("delete_item_request", self.handle_delete_item_request)
         ivy_bus.subscribe("set_floor_height_request", self.handle_set_floor_height_request)
+        ivy_bus.subscribe("delete_floor_request", self.handle_delete_floor_request)
 
         self.wall_start_point = None
         self.is_canceled_wall_draw = False
@@ -460,3 +461,45 @@ class Controller:
             self.floors[idx].set_height(height)
             if idx == self.selected_floor_index:
                 self._publish_height(self.floors[idx])
+
+    def handle_delete_floor_request(self, data):
+        floor_index = data.get("floor_index")
+        
+        if floor_index is None or floor_index < 0 or floor_index >= len(self.floors):
+            return
+
+        if len(self.floors) <= 1:
+            ivy_bus.publish("show_alert_request", {
+                "title": "Cannot Delete Floor",
+                "message": "You cannot delete the last floor."
+            })
+            return
+
+        # Store the floor name for logging
+        deleted_floor_name = self.floors[floor_index].name
+        
+        # Remove the floor
+        self.floors.pop(floor_index)
+        
+        # Adjust the selected floor index if needed
+        if self.selected_floor_index == floor_index:
+            # If we deleted the selected floor, select another one
+            if floor_index >= len(self.floors):
+                self.selected_floor_index = len(self.floors) - 1
+            # Otherwise keep the same index (it will now point to the next floor)
+        elif self.selected_floor_index > floor_index:
+            # If we deleted a floor before the selected one, decrement the index
+            self.selected_floor_index -= 1
+            
+        print(f"[Controller] deleted floor {deleted_floor_name}, new selected index = {self.selected_floor_index}")
+        
+        # Update the UI
+        ivy_bus.publish("clear_canvas_update", {})
+        ivy_bus.publish("new_floor_update", {
+            "floors": [f.name for f in self.floors],
+            "selected_floor_index": self.selected_floor_index
+        })
+        
+        # Select and draw the new floor
+        selected_floor = self.floors[self.selected_floor_index]
+        self.handle_floor_selected_request({"floor_index": self.selected_floor_index})
