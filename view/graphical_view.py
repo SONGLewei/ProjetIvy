@@ -94,9 +94,6 @@ class GraphicalView(tk.Tk):
         topBarFrame = tk.Frame(self, bg=self.colors["topbar_bg"])
         topBarFrame.pack(side=tk.TOP, fill=tk.X)
 
-        new_floor_btn = ttk.Button(topBarFrame, text="New floor", command=self.on_new_floor_button_click)
-        new_floor_btn.pack(side=tk.LEFT, padx=(20, 10), pady=10)
-
         centerFrame = tk.Frame(topBarFrame, bg=self.colors["topbar_bg"])
         centerFrame.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
@@ -104,6 +101,9 @@ class GraphicalView(tk.Tk):
                                            text="No floor selected",
                                            style="FloorLabel.TLabel")
         self.currentFloorLabel.pack(anchor="center", pady=5)
+        
+        new_floor_btn = ttk.Button(topBarFrame, text="New floor", command=self.on_new_floor_button_click)
+        new_floor_btn.pack(side=tk.RIGHT, padx=(10, 20), pady=10)
 
     def _create_main_area(self):
         mainFrame = tk.Frame(self, bg=self.colors["main_bg"])
