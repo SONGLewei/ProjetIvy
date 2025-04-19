@@ -551,20 +551,65 @@ class GraphicalView(tk.Tk):
         start, end = data["start"], data["end"]
         role, color = data["role"], data["color"]
 
+        # Get vent name - name can be any text but must not be empty
         name = simpledialog.askstring("Nom de la ventilation", "Entrez le nom de la ventilation :")
-        if not name:
+        if not name or name.strip() == "":
+            self.on_show_alert_request({
+                "title": "Entrée invalide",
+                "message": "Le nom de la ventilation ne peut pas être vide."
+            })
             ivy_bus.publish("cancal_to_draw_vent_request", {})
             return
 
-        diameter = simpledialog.askstring("Diamètre (mm)", "Entrez le diamètre de la ventilation (mm) :")
-        if diameter is None:
-            ivy_bus.publish("cancal_to_draw_vent_request", {})
-            return
+        # Validate diameter is an integer
+        while True:
+            diameter = simpledialog.askstring("Diamètre (mm)", "Entrez le diamètre de la ventilation (mm) :")
+            if diameter is None:  # User cancelled
+                ivy_bus.publish("cancal_to_draw_vent_request", {})
+                return
+                
+            # Check if input is a valid integer
+            if not diameter.strip():
+                self.on_show_alert_request({
+                    "title": "Entrée invalide",
+                    "message": "Le diamètre ne peut pas être vide."
+                })
+                continue
+                
+            if not diameter.isdigit():
+                self.on_show_alert_request({
+                    "title": "Entrée invalide",
+                    "message": "Le diamètre doit être un nombre entier positif."
+                })
+                continue
+                
+            # Valid integer, break out of the loop
+            break
 
-        flow = simpledialog.askstring("Débit d'air (m³/h)", "Entrez le débit d'air (m³/h) :")
-        if flow is None:
-            ivy_bus.publish("cancal_to_draw_vent_request", {})
-            return
+        # Validate flow rate is an integer
+        while True:
+            flow = simpledialog.askstring("Débit d'air (m³/h)", "Entrez le débit d'air (m³/h) :")
+            if flow is None:  # User cancelled
+                ivy_bus.publish("cancal_to_draw_vent_request", {})
+                return
+                
+            # Check if input is a valid integer
+            if not flow.strip():
+                self.on_show_alert_request({
+                    "title": "Entrée invalide",
+                    "message": "Le débit d'air ne peut pas être vide."
+                })
+                continue
+                
+            if not flow.isdigit():
+                self.on_show_alert_request({
+                    "title": "Entrée invalide",
+                    "message": "Le débit d'air doit être un nombre entier positif."
+                })
+                continue
+                
+            # Valid integer, break out of the loop
+            break
 
         ivy_bus.publish("create_vent_request", {
             "start": start, "end": end,
