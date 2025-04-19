@@ -56,8 +56,12 @@ class GraphicalView(tk.Tk):
         ivy_bus.subscribe("draw_vent_update",         self.on_draw_vent_update)
         ivy_bus.subscribe("floor_height_update",      self.on_floor_height_update)
         
+        # Set initial cursor
+        self.current_tool = 'select'  # Default tool
+        
         # Request the initial floor information from the controller
         self.after(100, self._request_initial_floor)
+        self.after(100, self._update_cursor)
 
     def _setup_style(self):
         style = ttk.Style(self)
@@ -350,6 +354,9 @@ class GraphicalView(tk.Tk):
         ivy_bus.publish("new_floor_request", {})
 
     def on_tool_button_click(self, tool):
+        self.current_tool = tool  # Update local tool state immediately
+        self._update_cursor()     # Update cursor immediately for responsiveness
+        
         if tool == "vent":
             ivy_bus.publish("tool_selected_request", {"tool": tool})
             self.show_vent_type_menu()
@@ -605,7 +612,16 @@ class GraphicalView(tk.Tk):
         (such as highlighting the current tool button, or displaying "Current Tool" in the status bar)
         """
         self.current_tool = data.get("tool")
+        self._update_cursor()
 
+    def _update_cursor(self):
+        """
+        Update the cursor appearance based on the current tool
+        """
+        if self.current_tool in ['wall', 'window', 'door', 'vent']:
+            self.canvas.config(cursor="crosshair")
+        else:
+            self.canvas.config(cursor="arrow")
 
     def on_show_alert_request(self, data):
         title = data.get("title", "Alert")
