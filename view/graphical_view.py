@@ -9,7 +9,7 @@ from view.tooltip import Tooltip
 class GraphicalView(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("VMC Application")
+        self.title("Application VMC")
         self.geometry("1000x600")
 
         self.currentFloorLabel = None
@@ -102,11 +102,11 @@ class GraphicalView(tk.Tk):
         centerFrame.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         self.currentFloorLabel = ttk.Label(centerFrame,
-                                           text="No floor selected",
+                                           text="Aucun étage sélectionné",
                                            style="FloorLabel.TLabel")
         self.currentFloorLabel.pack(anchor="center", pady=5)
         
-        new_floor_btn = ttk.Button(topBarFrame, text="New floor", command=self.on_new_floor_button_click)
+        new_floor_btn = ttk.Button(topBarFrame, text="Nouvel étage", command=self.on_new_floor_button_click)
         new_floor_btn.pack(side=tk.RIGHT, padx=(10, 20), pady=10)
 
     def _create_main_area(self):
@@ -213,7 +213,7 @@ class GraphicalView(tk.Tk):
         )
         self.compass_canvas.create_text(
             center_x - radius - 10, center_y,
-            text='W', font=('Helvetica', 8, 'bold')
+            text='O', font=('Helvetica', 8, 'bold')
         )
 
         line_y = center_y + radius + 25
@@ -242,11 +242,25 @@ class GraphicalView(tk.Tk):
         iconFrame = tk.Frame(toolbarFrame, bg=self.colors["toolbar_bg"])
         iconFrame.pack(side=tk.LEFT)
 
+        # Tool names in French
+        tool_names = {
+            'select': 'Sélection',
+            'eraser': 'Gomme',
+            'wall': 'Mur',
+            'window': 'Fenêtre',
+            'door': 'Porte',
+            'vent': 'Ventilation'
+        }
+
         for t in ['select','eraser', 'wall', 'window', 'door', 'vent']:
-            ttk.Button(iconFrame,
+            btn = ttk.Button(iconFrame,
                        image=self.icons.get(t),
                        command=lambda tool=t: self.on_tool_button_click(tool)
-                       ).pack(side=tk.LEFT, padx=10, pady=5)
+                       )
+            btn.pack(side=tk.LEFT, padx=10, pady=5)
+            
+            # Create tooltip for each button
+            Tooltip(self, btn, tool_names.get(t, t))
 
         rightSpace = tk.Label(toolbarFrame, bg=self.colors["toolbar_bg"])
         rightSpace.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -277,8 +291,8 @@ class GraphicalView(tk.Tk):
         if self.current_tool == "vent":
             if not self.vent_role:
                 self.on_show_alert_request({
-                    "title": "Vent type not selected",
-                    "message": "Please choose a vent type first."
+                    "title": "Type de ventilation non sélectionné",
+                    "message": "Veuillez d'abord choisir un type de ventilation."
                 })
                 return
             ivy_bus.publish("draw_vent_request", {
@@ -373,19 +387,19 @@ class GraphicalView(tk.Tk):
         menu = tk.Menu(self,tearoff=0)
 
         menu.add_command(
-            label="Rename",
+            label="Renommer",
             command=lambda:self.on_rename_floor(floor_index)
         )
 
         menu.add_command(
-            label="Definie the height",
+            label="Définir la hauteur",
             command=lambda: self.on_set_height(floor_index)
         )
         
         menu.add_separator()
         
         menu.add_command(
-            label="Delete",
+            label="Supprimer",
             command=lambda: self.on_delete_floor(floor_index)
         )
 
@@ -393,8 +407,8 @@ class GraphicalView(tk.Tk):
         
     def on_rename_floor(self,floor_index):
         new_name=simpledialog.askstring(
-            title="Rename Floor",
-            prompt="Enter new floor name: "
+            title="Renommer l'étage",
+            prompt="Entrez le nouveau nom de l'étage : "
         )
 
         if new_name:
@@ -537,17 +551,17 @@ class GraphicalView(tk.Tk):
         start, end = data["start"], data["end"]
         role, color = data["role"], data["color"]
 
-        name = simpledialog.askstring("Vent name", "Enter vent name:")
+        name = simpledialog.askstring("Nom de la ventilation", "Entrez le nom de la ventilation :")
         if not name:
             ivy_bus.publish("cancal_to_draw_vent_request", {})
             return
 
-        diameter = simpledialog.askstring("Diameter (mm)", "Enter vent diameter (mm):")
+        diameter = simpledialog.askstring("Diamètre (mm)", "Entrez le diamètre de la ventilation (mm) :")
         if diameter is None:
             ivy_bus.publish("cancal_to_draw_vent_request", {})
             return
 
-        flow = simpledialog.askstring("Flow rate (m³/h)", "Enter flow rate (m³/h):")
+        flow = simpledialog.askstring("Débit d'air (m³/h)", "Entrez le débit d'air (m³/h) :")
         if flow is None:
             ivy_bus.publish("cancal_to_draw_vent_request", {})
             return
@@ -566,7 +580,7 @@ class GraphicalView(tk.Tk):
         }
         """
         floor_name  = data.get("floor_name")
-        self.currentFloorLabel.config(text=f"Selected floor: {floor_name}")
+        self.currentFloorLabel.config(text=f"Étage sélectionné : {floor_name}")
 
     def on_new_floor_update(self, data):
         """
@@ -602,9 +616,9 @@ class GraphicalView(tk.Tk):
             btn.pack(pady=5)
 
         if selected_index is not None and 0 <= selected_index < len(floors):
-            self.currentFloorLabel.config(text=f"Selected floor: {floors[selected_index]}")
+            self.currentFloorLabel.config(text=f"Étage sélectionné : {floors[selected_index]}")
         else:
-            self.currentFloorLabel.config(text="No floor selected")
+            self.currentFloorLabel.config(text="Aucun étage sélectionné")
 
     def on_tool_selected_update(self, data):
         """
@@ -670,8 +684,8 @@ class GraphicalView(tk.Tk):
     
     def on_set_height(self, floor_index):
         value = simpledialog.askstring(
-            "Higit of this floor ",
-            "Enter the hight of this floor (m) :",
+            "Hauteur de cet étage",
+            "Entrez la hauteur de cet étage (m) :",
             parent=self
         )
         if value:
@@ -683,8 +697,8 @@ class GraphicalView(tk.Tk):
                 })
             except ValueError:
                 self.on_show_alert_request({
-                    "title": "Value incorrect",
-                    "message": "Please enter a valid number "
+                    "title": "Valeur incorrecte",
+                    "message": "Veuillez entrer un nombre valide"
                 })
 
     def on_floor_height_update(self, data):
@@ -703,7 +717,7 @@ class GraphicalView(tk.Tk):
 
         x_visible = self.canvas.canvasx(self.canvas.winfo_width()) - 10
         y_visible = self.canvas.canvasy(self.canvas.winfo_height()) - 10
-        txt = f"The height of this floor is : {self.current_floor_height} m"
+        txt = f"Hauteur de cet étage : {self.current_floor_height} m"
         self.height_text_id = self.canvas.create_text(
              x_visible, y_visible,
             anchor="se", text=txt,
@@ -715,8 +729,8 @@ class GraphicalView(tk.Tk):
 
     def on_delete_floor(self, floor_index):
         result = messagebox.askyesno(
-            "Confirm Deletion",
-            f"Are you sure you want to delete this floor?\nAll elements on this floor will be lost.",
+            "Confirmer la suppression",
+            f"Êtes-vous sûr de vouloir supprimer cet étage ?\nTous les éléments de cet étage seront perdus.",
             icon='warning'
         )
         

@@ -13,7 +13,7 @@ class Controller:
         self.floor_count = 0
         
         # Create default Floor 0
-        default_floor = Floor("Floor 0")
+        default_floor = Floor("Étage 0")
         self.floors.append(default_floor)
         self.selected_floor_index = 0
         
@@ -365,7 +365,7 @@ class Controller:
         Clear automatic the canvas
         """
         ivy_bus.publish("clear_canvas_update", {})
-        new_floor_name = f"Floor {len(self.floors)}"
+        new_floor_name = f"Étage {len(self.floors)}"
         new_floor = Floor(new_floor_name)
 
         if self.selected_floor_index is None:
@@ -394,8 +394,8 @@ class Controller:
 
         if self.selected_floor_index is None:
             ivy_bus.publish("show_alert_request",{
-                "title": "No Floors Available",
-                "message": "You must create a floor before using tools."
+                "title": "Aucun étage disponible",
+                "message": "Vous devez créer un étage avant d'utiliser les outils."
             })
             return
 
@@ -415,8 +415,8 @@ class Controller:
 
         if floor_index is None or not new_name.strip() or new_name == "":
             ivy_bus.publish("show_alert_request",{
-                "title":"Floor name empty",
-                "message":"The floor must have a name"
+                "title":"Nom d'étage vide",
+                "message":"L'étage doit avoir un nom"
             })
             return
         
@@ -470,8 +470,8 @@ class Controller:
 
         if len(self.floors) <= 1:
             ivy_bus.publish("show_alert_request", {
-                "title": "Cannot Delete Floor",
-                "message": "You cannot delete the last floor."
+                "title": "Impossible de supprimer l'étage",
+                "message": "Vous ne pouvez pas supprimer le dernier étage."
             })
             return
 
