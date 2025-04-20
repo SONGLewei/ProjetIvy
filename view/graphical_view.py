@@ -1,6 +1,7 @@
 import os
 import tkinter as tk
 import tkinter.simpledialog as simpledialog
+import tkinter.font
 from tkinter import ttk, PhotoImage
 from tkinter import messagebox
 from ivy.ivy_bus import ivy_bus
@@ -91,6 +92,8 @@ class GraphicalView(tk.Tk):
             'window': os.path.join(base_path, 'photos', 'window.png'),
             'door':   os.path.join(base_path, 'photos', 'door.png'),
             'vent':   os.path.join(base_path, 'photos', 'fan.png'),
+            'save':   os.path.join(base_path, 'photos', 'diskette.png'),
+            'import': os.path.join(base_path, 'photos', 'import.png'),
         }
         for name, path in icon_paths.items():
             try:
@@ -128,10 +131,64 @@ class GraphicalView(tk.Tk):
         topBarFrame = tk.Frame(self, bg=self.colors["topbar_bg"])
         topBarFrame.pack(side=tk.TOP, fill=tk.X)
 
-        # Remove the separator - we don't want double borders
-        # sep = ttk.Separator(self, orient="horizontal")
-        # sep.pack(side=tk.TOP, fill=tk.X)
+        # Add a left frame for the Save and Import buttons
+        leftFrame = tk.Frame(topBarFrame, bg=self.colors["topbar_bg"])
+        leftFrame.pack(side=tk.LEFT, padx=(20, 0), pady=10)
 
+        # Create Save button
+        save_btn_frame = tk.Frame(leftFrame, bg=self.colors["topbar_bg"])
+        save_btn_frame.pack(side=tk.LEFT, padx=(0, 10))
+        
+        save_canvas = tk.Canvas(
+            save_btn_frame,
+            width=45,
+            height=45,
+            bg="white",
+            highlightthickness=0,
+            cursor="hand2"
+        )
+        save_canvas.pack()
+        
+        # Add Save icon
+        if 'save' in self.icons:
+            save_canvas.create_image(45//2, 45//2, image=self.icons['save'])
+        
+        # Bind click event
+        save_canvas.bind("<Button-1>", lambda e: self.on_save_button_click())
+        
+        # Create tooltip for Save button
+        save_tooltip = Tooltip(self)
+        save_tooltip._attach_to_widget(save_canvas, "Sauvegarder")
+        self.tooltips.append(save_tooltip)
+        
+        # Create Import button
+        import_btn_frame = tk.Frame(leftFrame, bg=self.colors["topbar_bg"])
+        import_btn_frame.pack(side=tk.LEFT)
+        
+        import_canvas = tk.Canvas(
+            import_btn_frame,
+            width=45,
+            height=45,
+            bg="white",
+            highlightthickness=0,
+            cursor="hand2"
+        )
+        import_canvas.pack()
+        
+
+        # Add Import icon
+        if 'import' in self.icons:
+            import_canvas.create_image(45//2, 45//2, image=self.icons['import'])
+        
+        # Bind click event
+        import_canvas.bind("<Button-1>", lambda e: self.on_import_button_click())
+        
+        # Create tooltip for Import button
+        import_tooltip = Tooltip(self)
+        import_tooltip._attach_to_widget(import_canvas, "Importer")
+        self.tooltips.append(import_tooltip)
+
+        # Continue with the center frame and other elements
         centerFrame = tk.Frame(topBarFrame, bg=self.colors["topbar_bg"])
         centerFrame.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
@@ -179,6 +236,7 @@ class GraphicalView(tk.Tk):
 
         # Bind click event
         new_floor_canvas.bind("<Button-1>", lambda e: self.on_new_floor_button_click())
+
     def _create_main_area(self):
         mainFrame = tk.Frame(self, bg="white")  # Main frame background
         mainFrame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
@@ -835,11 +893,33 @@ class GraphicalView(tk.Tk):
                 is_selected = (i == selected_index)
                 bg_color = self.colors["selected_floor"] if is_selected else "white"
 
-                # Update shape color
-                canvas.itemconfig(canvas.shape_id, fill=bg_color, outline=bg_color)
+                # Update the shape color for all canvas items that are shapes
+                for item in canvas.find_all():
+                    if canvas.type(item) in ["rectangle", "oval", "polygon"] and item != canvas.text_id:
+                        canvas.itemconfig(item, fill=bg_color, outline=bg_color)
 
-                # Update text weight
-                canvas.itemconfig(canvas.text_id, font=("Helvetica", 11, "bold" if is_selected else "normal"))
+                # Update text weight and possibly truncate text again with new font weight
+                font_spec = ("Helvetica", 11, "bold" if is_selected else "normal")
+                
+                # Get the available width for text
+                available_width = 200 - 20  # Container width minus padding
+                text_padding = 20
+                max_text_width = available_width - (text_padding * 2)
+                
+                # Get the full text and truncate if needed
+                if hasattr(canvas, 'full_text'):
+                    full_text = canvas.full_text
+                else:
+                    full_text = canvas.itemcget(canvas.text_id, 'text')
+                    if full_text.endswith('...'):  # Best effort to recover original text
+                        full_text = floor_name
+                
+                display_text = self._truncate_text_with_ellipsis(full_text, max_text_width, font_spec)
+                
+                # Update text and font
+                canvas.itemconfig(canvas.text_id, 
+                                  text=display_text,
+                                  font=font_spec)
 
     def on_new_floor_update(self, data):
         """
@@ -877,7 +957,7 @@ class GraphicalView(tk.Tk):
                 width=available_width,
                 bg="white",
                 highlightthickness=0,
-                cursor="hand2"  # Add pointer cursor
+                cursor="hand2"
             )
             canvas.pack(fill=tk.X)
 
@@ -885,9 +965,8 @@ class GraphicalView(tk.Tk):
             is_selected = (i == selected_index)
             button_bg = self.colors["selected_floor"] if is_selected else "white"
 
-            # Draw a proper rounded rectangle - using a better approach
-            # Create the button background - rounded on left side only
-            radius = 20  # Slightly smaller radius for better appearance
+            # Update to match the "+ Nouvel étage" button radius (5px)
+            radius = 5  # Changed from 20 to 5 to match the "+ Nouvel étage" button
 
             # Define the box with some padding
             x1 = 5
@@ -895,48 +974,55 @@ class GraphicalView(tk.Tk):
             x2 = available_width - 5
             y2 = button_height - 5
 
-            # Draw the main shape as a polygon with rounded corners
-            points = [
-                # Top side
-                x1 + radius, y1,
-                x2, y1,
-                # Right side
-                x2, y2,
-                # Bottom side
-                x1 + radius, y2,
-                # Bottom-left corner (arc approximation)
-                x1, y2,
-                # Left side
-                x1, y1 + radius,
-                # Top-left corner (arc approximation)
-                x1 + radius, y1
-            ]
+            # Create rounded corners using ovals (similar to "+ Nouvel étage" button)
+            canvas.create_oval(x1, y1, x1 + 2*radius, y1 + 2*radius, fill=button_bg, outline="")
+            canvas.create_oval(x2 - 2*radius, y1, x2, y1 + 2*radius, fill=button_bg, outline="")
+            canvas.create_oval(x1, y2 - 2*radius, x1 + 2*radius, y2, fill=button_bg, outline="")
+            canvas.create_oval(x2 - 2*radius, y2 - 2*radius, x2, y2, fill=button_bg, outline="")
 
-            # Create the main shape
-            shape_id = canvas.create_polygon(points, fill=button_bg, outline=button_bg, smooth=True)
+            # Create rectangles to complete the rounded shape
+            canvas.create_rectangle(x1 + radius, y1, x2 - radius, y1 + 2*radius, fill=button_bg, outline="")  # Top
+            canvas.create_rectangle(x1, y1 + radius, x2, y2 - radius, fill=button_bg, outline="")  # Middle
+            canvas.create_rectangle(x1 + radius, y2 - 2*radius, x2 - radius, y2, fill=button_bg, outline="")  # Bottom
 
+            # Store the background shape ID (use the first rectangle as reference)
+            shape_id = canvas.create_rectangle(x1, y1 + radius, x2, y2 - radius, fill=button_bg, outline="")
+            canvas.tag_lower(shape_id)  # Move it to the back
+            
             # Add text, left-aligned with padding
             text_padding = 20
+            max_text_width = available_width - (text_padding * 2)  # Available width for text
+            font_spec = ("Helvetica", 11, "bold" if is_selected else "normal")
+            
+            # Truncate text if needed
+            display_text = self._truncate_text_with_ellipsis(floor_name, max_text_width, font_spec)
+            
             text_id = canvas.create_text(
                 text_padding,
                 button_height / 2,
-                text=floor_name, 
+                text=display_text, 
                 anchor="w",  # Left-aligned
                 fill=self.colors["floor_text"],
-                font=("Helvetica", 11, "bold" if is_selected else "normal")
+                font=font_spec
             )
 
             # Store IDs for later updates
-            canvas.tag_lower(shape_id)  # Ensure shape is behind text
             canvas.tag_raise(text_id)   # Ensure text is on top
 
             # Save references to the shape and text for easy updates
             canvas.shape_id = shape_id
             canvas.text_id = text_id
+            canvas.full_text = floor_name  # Store the original full text
 
             # Bind click events
             canvas.bind("<Button-1>", lambda e, idx=i: self.on_floor_button_click(idx))
             canvas.bind("<Button-3>", lambda e, idx=i: self.on_floor_button_right_click(e, idx))
+
+            # Add tooltip with full text if truncated
+            if display_text != floor_name:
+                floor_tooltip = Tooltip(self)
+                floor_tooltip._attach_to_widget(canvas, floor_name)
+                self.tooltips.append(floor_tooltip)
 
             self.floor_buttons.append(btn_frame)
 
@@ -1165,3 +1251,42 @@ class GraphicalView(tk.Tk):
             for item in canvas.find_all():
                 if canvas.type(item) in ("rectangle", "oval"):
                     canvas.itemconfig(item, fill=self.colors["selected_tool"])
+
+    def on_save_button_click(self):
+        # For now, just inform the user that the feature is not implemented
+        ivy_bus.publish("show_alert_request", {
+            "title": "Sauvegarde",
+            "message": "Fonctionnalité de sauvegarde à implémenter."
+        })
+        # In a real implementation, you would publish an event for the controller to handle saving
+
+    def on_import_button_click(self):
+        # For now, just inform the user that the feature is not implemented
+        ivy_bus.publish("show_alert_request", {
+            "title": "Importation",
+            "message": "Fonctionnalité d'importation à implémenter."
+        })
+        # In a real implementation, you would publish an event for the controller to handle importing
+
+    def _truncate_text_with_ellipsis(self, text, max_width, font):
+        """Truncates text with ellipsis if it exceeds max_width pixels"""
+        # Get Tkinter font object to measure text width
+        font_obj = tk.font.Font(family=font[0], size=font[1], weight=font[2] if len(font) > 2 else "normal")
+        
+        # If text fits, return it as is
+        if font_obj.measure(text) <= max_width:
+            return text
+        
+        # Truncate with ellipsis
+        ellipsis = "..."
+        ellipsis_width = font_obj.measure(ellipsis)
+        
+        # Start with empty result and add characters one by one
+        result = ""
+        for char in text:
+            # Check if adding this character + ellipsis would exceed max width
+            if font_obj.measure(result + char) + ellipsis_width > max_width:
+                return result + ellipsis
+            result += char
+        
+        return result  # Shouldn't reach here, but just in case
