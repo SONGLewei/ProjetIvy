@@ -16,7 +16,7 @@ class GraphicalView(tk.Tk):
         self.floor_count = 0
         self.current_floor = None
         self.floor_buttons = []
-        self.current_tool = None
+        self.current_tool = 'select'  # Default tool is already set to select
         self.vent_role = None
         self.vent_color = None
         self.canvas_item_meta = {}
@@ -68,6 +68,10 @@ class GraphicalView(tk.Tk):
         # Request the initial floor information from the controller
         self.after(100, self._request_initial_floor)
         self.after(100, self._update_cursor)
+
+        # Highlight the select tool button initially and notify controller
+        self.after(200, lambda: self._highlight_tool_button('select'))
+        self.after(200, lambda: ivy_bus.publish("tool_selected_request", {"tool": 'select'}))
 
     def _setup_style(self):
         style = ttk.Style(self)
@@ -146,7 +150,8 @@ class GraphicalView(tk.Tk):
             width=130,
             height=40,
             bg=self.colors["topbar_bg"],
-            highlightthickness=0
+            highlightthickness=0,
+            cursor="hand2"  # Add pointer cursor
         )
         new_floor_canvas.pack(side=tk.RIGHT, padx=(10, 20), pady=10)
 
@@ -271,7 +276,8 @@ class GraphicalView(tk.Tk):
 
     def _create_compass_layer(self, parent_frame):
         self.compass_canvas = tk.Canvas(parent_frame, width=80, height=120,
-                                        bg="white", highlightthickness=0)
+                                        bg="white", highlightthickness=0, 
+                                        cursor="arrow")  # Use arrow cursor to indicate it's not clickable
 
         self.compass_canvas.place(x=1, y=1)  # Added 1px margin from the border
 
@@ -321,6 +327,7 @@ class GraphicalView(tk.Tk):
         self.compass_canvas.create_line(
             start_x, line_y + 10, end_x, line_y + 10, width=2, fill="black"
         )
+
     def _create_bottom_toolbar(self):
         toolbarFrame = tk.Frame(self, bg=self.colors["toolbar_bg"])
         toolbarFrame.pack(side=tk.BOTTOM, fill=tk.X)  # Increased bottom margin to 20px
@@ -355,7 +362,8 @@ class GraphicalView(tk.Tk):
                 height=50,
                 bg=self.colors["toolbar_bg"],
                 highlightthickness=0,
-                bd=0
+                bd=0,
+                cursor="hand2"  # Add pointer cursor
             )
             canvas.pack(fill=tk.BOTH, expand=True)
 
@@ -566,10 +574,22 @@ class GraphicalView(tk.Tk):
         menu = tk.Menu(self, tearoff=0)
 
         vent_options = [
-        ("En rouge, extraction de l'air vicié",          "#ff0000", "extraction_interne"),
-        ("En orange, insufflation de l'air neuf",        "#ff9900", "insufflation_interne"),
-        ("En bleu foncé, extraction à l'extérieur",       "#003366", "extraction_externe"),
-        ("En bleu clair, admission d'air neuf extérieur", "#66ccff", "admission_externe"),
+            ("En rouge, extraction de l'air vicié", "#ff0000", "extraction_interne"),
+            (
+                "En orange, insufflation de l'air neuf",
+                "#ff9900",
+                "insufflation_interne",
+            ),
+            (
+                "En bleu foncé, extraction à l'extérieur",
+                "#4c7093",
+                "extraction_externe",
+            ),
+            (
+                "En bleu clair, admission d'air neuf extérieur",
+                "#66ccff",
+                "admission_externe",
+            ),
         ]
 
         for label, color, role in vent_options:
@@ -612,9 +632,20 @@ class GraphicalView(tk.Tk):
                 start[0], start[1], end[0], end[1],
                 fill=fill ,width=6,tags=("wall",)
             )
+            
+            # Calculate wall length in meters (using scale where 40px = 2m from _create_compass_layer)
+            dx = end[0] - start[0]
+            dy = end[1] - start[1]
+            length_px = (dx**2 + dy**2)**0.5
+            length_m = length_px * (2.0/40.0)  # Convert to meters based on scale
+            
+            # Store length data for tooltip
+            self.canvas_item_meta[item] = {
+                'text': f"{length_m:.2f}m",
+                'type': 'wall'
+            }
+            
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-        # self.canvas.create_line(start[0], start[1], end[0], end[1], fill=fill)
 
     def on_draw_window_update(self,data):
         start = data.get("start")
@@ -703,7 +734,8 @@ class GraphicalView(tk.Tk):
                     'name': name,
                     'diameter': diameter,
                     'flow': flow,
-                    'role': role
+                    'role': role,
+                    'type': 'vent'  # Add type field for consistency
                 }
 
     def on_vent_need_info_request(self, data):
@@ -844,7 +876,8 @@ class GraphicalView(tk.Tk):
                 height=button_height,
                 width=available_width,
                 bg="white",
-                highlightthickness=0
+                highlightthickness=0,
+                cursor="hand2"  # Add pointer cursor
             )
             canvas.pack(fill=tk.X)
 
@@ -976,20 +1009,30 @@ class GraphicalView(tk.Tk):
         self.current_hover_item = item
 
         if item in self.canvas_item_meta:
-            # Create a dedicated tooltip for this vent if it doesn't exist
-            if item not in self.vent_tooltips:
-                self.vent_tooltips[item] = Tooltip(self)
-
-            # Get tooltip data
             meta_data = self.canvas_item_meta[item]
-            tooltip_text = meta_data['text'] if isinstance(meta_data, dict) else meta_data
-
-            # Schedule showing this vent's tooltip
-            if tooltip_text and tooltip_text.strip():
+            item_type = meta_data.get('type', '') if isinstance(meta_data, dict) else ''
+            
+            if item_type == 'wall':
+                # For walls, use the main tooltip
+                tooltip_text = meta_data['text']
                 self.hover_after_id = self.after(
-                    1000,
-                    lambda: self.vent_tooltips[item].show(tooltip_text, x_root, y_root)
+                    500,  # Use a shorter delay for wall tooltips (500ms instead of 1000ms)
+                    lambda: self.tooltip.show(tooltip_text, x_root, y_root)
                 )
+            else:
+                # Create a dedicated tooltip for vents if it doesn't exist
+                if item not in self.vent_tooltips:
+                    self.vent_tooltips[item] = Tooltip(self)
+
+                # Get tooltip data for vents
+                tooltip_text = meta_data['text'] if isinstance(meta_data, dict) else meta_data
+
+                # Schedule showing this vent's tooltip
+                if tooltip_text and tooltip_text.strip():
+                    self.hover_after_id = self.after(
+                        1000,
+                        lambda: self.vent_tooltips[item].show(tooltip_text, x_root, y_root)
+                    )
 
     def _cancel_hover(self):
         """Cancel any pending hover tooltip"""
@@ -1014,10 +1057,10 @@ class GraphicalView(tk.Tk):
         try:
             items = self.canvas.find_overlapping(event.x, event.y, event.x, event.y)
             # Find the first item that has metadata (for tooltip)
-            vent_item = next((i for i in items if i in self.canvas_item_meta), None)
+            hover_item = next((i for i in items if i in self.canvas_item_meta), None)
 
-            if vent_item:
-                self._schedule_hover(vent_item, event.x_root + 10, event.y_root + 10)
+            if hover_item:
+                self._schedule_hover(hover_item, event.x_root + 10, event.y_root + 10)
             else:
                 self._cancel_hover()
         except Exception as e:
@@ -1115,3 +1158,10 @@ class GraphicalView(tk.Tk):
             # Content fits, ensure scrollbar is hidden
             if self.floor_vsb.winfo_ismapped():
                 self.floor_vsb.pack_forget()
+
+    def _highlight_tool_button(self, tool):
+        if tool in self.tool_buttons:
+            canvas = self.tool_buttons[tool]
+            for item in canvas.find_all():
+                if canvas.type(item) in ("rectangle", "oval"):
+                    canvas.itemconfig(item, fill=self.colors["selected_tool"])
