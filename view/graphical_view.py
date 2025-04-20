@@ -497,25 +497,29 @@ class GraphicalView(tk.Tk):
 
     # --------------------------------- Handle events ------------------------------------------------
     def on_canvas_left_click(self, event):
+        # Convert window coordinates to canvas coordinates
+        canvas_x = self.canvas.canvasx(event.x)
+        canvas_y = self.canvas.canvasy(event.y)
+        
         if self.current_tool == "wall":
             ivy_bus.publish("draw_wall_request", {
-                "x": event.x,
-                "y": event.y,
-                "is_click":True
+                "x": canvas_x,
+                "y": canvas_y,
+                "is_click": True
             })
 
         if self.current_tool == "window":
-            ivy_bus.publish("draw_window_request",{
-                "x": event.x,
-                "y": event.y,
-                "is_click":True
+            ivy_bus.publish("draw_window_request", {
+                "x": canvas_x,
+                "y": canvas_y,
+                "is_click": True
             })
 
         if self.current_tool == "door":
-            ivy_bus.publish("draw_door_request",{
-                "x": event.x,
-                "y": event.y,
-                "is_click":True
+            ivy_bus.publish("draw_door_request", {
+                "x": canvas_x,
+                "y": canvas_y,
+                "is_click": True
             })
 
         if self.current_tool == "vent":
@@ -526,13 +530,16 @@ class GraphicalView(tk.Tk):
                 })
                 return
             ivy_bus.publish("draw_vent_request", {
-                "x": event.x, "y": event.y,
+                "x": canvas_x, 
+                "y": canvas_y,
                 "is_click": True,
-                "role":  self.vent_role,
+                "role": self.vent_role,
                 "color": self.vent_color
             })
         if self.current_tool == "eraser":
-            items = self.canvas.find_overlapping(event.x, event.y, event.x, event.y)
+            items = self.canvas.find_overlapping(
+                canvas_x, canvas_y, canvas_x, canvas_y
+            )
             if not items:
                 return
                 
@@ -561,32 +568,37 @@ class GraphicalView(tk.Tk):
                 "coords": coords
             })
 
-    def on_canvas_move(self,event):
+    def on_canvas_move(self, event):
+        # Convert window coordinates to canvas coordinates
+        canvas_x = self.canvas.canvasx(event.x)
+        canvas_y = self.canvas.canvasy(event.y)
+        
         if self.current_tool == "wall":
-            ivy_bus.publish("draw_wall_request",{
-                "x": event.x,
-                "y": event.y,
+            ivy_bus.publish("draw_wall_request", {
+                "x": canvas_x,
+                "y": canvas_y,
                 "is_preview": True
             })
 
         if self.current_tool == "window":
-            ivy_bus.publish("draw_window_request",{
-                "x": event.x,
-                "y": event.y,
+            ivy_bus.publish("draw_window_request", {
+                "x": canvas_x,
+                "y": canvas_y,
                 "is_preview": True
             })
         if self.current_tool == "door":
-            ivy_bus.publish("draw_door_request",{
-                "x": event.x,
-                "y": event.y,
+            ivy_bus.publish("draw_door_request", {
+                "x": canvas_x,
+                "y": canvas_y,
                 "is_preview": True
             })
 
         if self.current_tool == "vent" and self.vent_role:
             ivy_bus.publish("draw_vent_request", {
-                "x": event.x, "y": event.y,
+                "x": canvas_x, 
+                "y": canvas_y,
                 "is_preview": True,
-                "role":  self.vent_role,
+                "role": self.vent_role,
                 "color": self.vent_color
             })
 
@@ -1236,9 +1248,13 @@ class GraphicalView(tk.Tk):
         if not hasattr(self, "canvas") or not self.canvas:
             return
 
+        # Convert window coordinates to canvas coordinates
+        canvas_x = self.canvas.canvasx(event.x)
+        canvas_y = self.canvas.canvasy(event.y)
+        
         # Find items under the cursor
         try:
-            items = self.canvas.find_overlapping(event.x, event.y, event.x, event.y)
+            items = self.canvas.find_overlapping(canvas_x, canvas_y, canvas_x, canvas_y)
             # Find the first item that has metadata (for tooltip)
             hover_item = next((i for i in items if i in self.canvas_item_meta), None)
 
@@ -1278,8 +1294,17 @@ class GraphicalView(tk.Tk):
         self._redraw_height_text()
 
     def _on_window_configure(self, event):
+        """Handle window resizing events"""
         if event.widget is self:
             self._redraw_height_text()
+            
+            # Update the canvas scrollregion to match the new size
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            
+            # Reset canvas view if needed
+            if not self.canvas.bbox("all"):
+                self.canvas.xview_moveto(0)
+                self.canvas.yview_moveto(0)
 
     def _redraw_height_text(self):
         if self.current_floor_height is None:
