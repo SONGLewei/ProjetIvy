@@ -10,3 +10,6 @@ class Window(Wall):
 
     def __repr__(self):
         return f"Window({self.start} -> {self.end}, orientation={self.orientation}, length={self.length()}, thickness={self.thickness})"
+    
+    def to_dict(self):
+        return {"start": self.start, "end": self.end, "thickness": self.thickness}

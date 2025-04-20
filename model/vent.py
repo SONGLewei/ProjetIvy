@@ -13,3 +13,11 @@ class Vent(Wall):
         return (f"Vent({self.start} -> {self.end}, "
                 f"name={self.name}, diameter={self.diameter}, "
                 f"flow_rate={self.flow_rate}, function={self.function})")
+    
+    def to_dict(self):
+        return {
+            "start": self.start, "end": self.end,
+            "name": self.name, "diameter": self.diameter,
+            "flow_rate": self.flow_rate, "function": self.function,
+            "color": self.color
+        }

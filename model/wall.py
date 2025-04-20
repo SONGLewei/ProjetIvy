@@ -23,3 +23,6 @@ class Wall(Object):
 
     def __repr__(self):
         return f"Wall({self.start} -> {self.end}, orientation={self.orientation}, length={self.length()})"
+
+    def to_dict(self):
+        return {"start": self.start, "end": self.end}

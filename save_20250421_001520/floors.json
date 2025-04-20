@@ -1,0 +1,148 @@
+[
+    {
+        "name": "HAHA",
+        "height": 2.5,
+        "walls": [
+            {
+                "start": [
+                    518.0,
+                    255.0
+                ],
+                "end": [
+                    787.0,
+                    255.0
+                ]
+            }
+        ],
+        "windows": [
+            {
+                "start": [
+                    699.0,
+                    372.0
+                ],
+                "end": [
+                    699.0,
+                    78.0
+                ],
+                "thickness": 5
+            }
+        ],
+        "doors": [],
+        "vents": []
+    },
+    {
+        "name": "etage 4",
+        "height": 2.5,
+        "walls": [],
+        "windows": [],
+        "doors": [],
+        "vents": []
+    },
+    {
+        "name": "etage 1",
+        "height": 2.5,
+        "walls": [
+            {
+                "start": [
+                    613.0,
+                    387.0
+                ],
+                "end": [
+                    613.0,
+                    72.0
+                ]
+            }
+        ],
+        "windows": [],
+        "doors": [],
+        "vents": []
+    },
+    {
+        "name": "etage 2",
+        "height": 5.0,
+        "walls": [],
+        "windows": [],
+        "doors": [
+            {
+                "start": [
+                    833.0,
+                    355.0
+                ],
+                "end": [
+                    194.0,
+                    355.0
+                ]
+            }
+        ],
+        "vents": []
+    },
+    {
+        "name": "etage 3",
+        "height": 2.5,
+        "walls": [],
+        "windows": [],
+        "doors": [],
+        "vents": [
+            {
+                "start": [
+                    749.0,
+                    259.0
+                ],
+                "end": [
+                    209.0,
+                    259.0
+                ],
+                "name": "aaa",
+                "diameter": "3",
+                "flow_rate": "N/A",
+                "function": "extraction_interne",
+                "color": "#ff0000"
+            },
+            {
+                "start": [
+                    607.0,
+                    290.0
+                ],
+                "end": [
+                    607.0,
+                    112.0
+                ],
+                "name": "gg",
+                "diameter": "3",
+                "flow_rate": "N/A",
+                "function": "insufflation_interne",
+                "color": "#ff9900"
+            },
+            {
+                "start": [
+                    703.0,
+                    462.0
+                ],
+                "end": [
+                    703.0,
+                    176.0
+                ],
+                "name": "hh",
+                "diameter": "5",
+                "flow_rate": "N/A",
+                "function": "extraction_externe",
+                "color": "#4c7093"
+            },
+            {
+                "start": [
+                    517.0,
+                    416.0
+                ],
+                "end": [
+                    517.0,
+                    169.0
+                ],
+                "name": "wer",
+                "diameter": "3",
+                "flow_rate": "N/A",
+                "function": "admission_externe",
+                "color": "#66ccff"
+            }
+        ]
+    }
+]

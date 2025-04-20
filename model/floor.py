@@ -32,3 +32,14 @@ class Floor:
                 f"{len(self.doors)} doors, "
                 f"{len(self.windows)} windows, "
                 f"{len(self.vents)} vents>")
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "height": self.height,
+            "walls":   [w.to_dict() for w in self.walls],
+            "windows": [w.to_dict() for w in self.windows],
+            "doors":   [d.to_dict() for d in self.doors],
+            "vents":   [v.to_dict() for v in self.vents]
+        }
+

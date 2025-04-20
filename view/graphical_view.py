@@ -6,6 +6,7 @@ from tkinter import ttk, PhotoImage
 from tkinter import messagebox
 from ivy.ivy_bus import ivy_bus
 from view.tooltip import Tooltip 
+from tkinter import filedialog
 
 class GraphicalView(tk.Tk):
     def __init__(self):
@@ -235,7 +236,7 @@ class GraphicalView(tk.Tk):
         label_frame.pack(anchor="center", pady=5)
 
         self.currentFloorLabel = ttk.Label(label_frame,
-                                           text="Aucun étage sélectionné",
+                                           text="Aucun etage selectionne",
                                            style="FloorLabel.TLabel")
         self.currentFloorLabel.pack(anchor="center")
 
@@ -267,7 +268,7 @@ class GraphicalView(tk.Tk):
         # Add text
         new_floor_canvas.create_text(
             65, 20,
-            text="+ Nouvel étage",
+            text="+ Nouvel etage",
             fill="white",
             font=("Helvetica", 11, "bold")
         )
@@ -338,8 +339,8 @@ class GraphicalView(tk.Tk):
         scrollWrap = tk.Frame(rightContainer, bg="white")
         scrollWrap.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10)  # Add padding inside the container
 
-        # Add a "Étage" label at the top of the floor list
-        floor_title = tk.Label(scrollWrap, text="Étage", font=("Helvetica", 12), fg="#2f3039", bg="white")
+        # Add a "etage" label at the top of the floor list
+        floor_title = tk.Label(scrollWrap, text="etage", font=("Helvetica", 12), fg="#2f3039", bg="white")
         floor_title.pack(side=tk.TOP, anchor="w", pady=(10, 10))
 
         self.floorCanvas = tk.Canvas(
@@ -436,7 +437,7 @@ class GraphicalView(tk.Tk):
 
         # Tool names in French (direct constant strings for better reliability)
         tool_buttons = [
-            ('select', 'Sélection'),
+            ('select', 'Selection'),
             ('eraser', 'Gomme'),
             ('wall', 'Mur'),
             ('window', 'Fenêtre'),
@@ -525,7 +526,7 @@ class GraphicalView(tk.Tk):
         if self.current_tool == "vent":
             if not self.vent_role:
                 self.on_show_alert_request({
-                    "title": "Type de ventilation non sélectionné",
+                    "title": "Type de ventilation non selectionne",
                     "message": "Veuillez d'abord choisir un type de ventilation."
                 })
                 return
@@ -665,7 +666,7 @@ class GraphicalView(tk.Tk):
         )
 
         menu.add_command(
-            label="Définir la hauteur",
+            label="Definir la hauteur",
             command=lambda: self.on_set_height(floor_index)
         )
 
@@ -680,8 +681,8 @@ class GraphicalView(tk.Tk):
 
     def on_rename_floor(self,floor_index):
         new_name=simpledialog.askstring(
-            title="Renommer l'étage",
-            prompt="Entrez le nouveau nom de l'étage : "
+            title="Renommer l'etage",
+            prompt="Entrez le nouveau nom de l'etage : "
         )
 
         if new_name:
@@ -694,19 +695,19 @@ class GraphicalView(tk.Tk):
         menu = tk.Menu(self, tearoff=0)
 
         vent_options = [
-            ("En rouge, extraction de l'air vicié", "#ff0000", "extraction_interne"),
+            ("En rouge, extraction de l'air vicie", "#ff0000", "extraction_interne"),
             (
                 "En orange, insufflation de l'air neuf",
                 "#ff9900",
                 "insufflation_interne",
             ),
             (
-                "En bleu foncé, extraction à l'extérieur",
+                "En bleu fonce, extraction a l'exterieur",
                 "#4c7093",
                 "extraction_externe",
             ),
             (
-                "En bleu clair, admission d'air neuf extérieur",
+                "En bleu clair, admission d'air neuf exterieur",
                 "#66ccff",
                 "admission_externe",
             ),
@@ -881,7 +882,7 @@ class GraphicalView(tk.Tk):
                 flow = data.get('flow', '')
                 role = data.get('role', '')
 
-                meta = f"{name}\nØ {diameter} mm\n{flow} m³/h\n{role}"
+                meta = f"{name}\nO {diameter} mm\n{flow} m3/h\n{role}"
 
                 # Ensure meta data is not empty
                 if meta and meta.strip():
@@ -906,7 +907,7 @@ class GraphicalView(tk.Tk):
         name = simpledialog.askstring("Nom de la ventilation", "Entrez le nom de la ventilation :")
         if not name or name.strip() == "":
             self.on_show_alert_request({
-                "title": "Entrée invalide",
+                "title": "Entree invalide",
                 "message": "Le nom de la ventilation ne peut pas être vide."
             })
             ivy_bus.publish("cancal_to_draw_vent_request", {})
@@ -922,14 +923,14 @@ class GraphicalView(tk.Tk):
             # Check if input is a valid integer
             if not diameter.strip():
                 self.on_show_alert_request({
-                    "title": "Entrée invalide",
+                    "title": "Entree invalide",
                     "message": "Le diamètre ne peut pas être vide."
                 })
                 continue
 
             if not diameter.isdigit():
                 self.on_show_alert_request({
-                    "title": "Entrée invalide",
+                    "title": "Entree invalide",
                     "message": "Le diamètre doit être un nombre entier positif."
                 })
                 continue
@@ -939,7 +940,7 @@ class GraphicalView(tk.Tk):
 
         # Validate flow rate is an integer
         while True:
-            flow = simpledialog.askstring("Débit d'air (m³/h)", "Entrez le débit d'air (m³/h) :")
+            flow = simpledialog.askstring("Debit d'air (m³/h)", "Entrez le debit d'air (m³/h) :")
             if flow is None:  # User cancelled
                 ivy_bus.publish("cancal_to_draw_vent_request", {})
                 return
@@ -947,15 +948,15 @@ class GraphicalView(tk.Tk):
             # Check if input is a valid integer
             if not flow.strip():
                 self.on_show_alert_request({
-                    "title": "Entrée invalide",
-                    "message": "Le débit d'air ne peut pas être vide."
+                    "title": "Entree invalide",
+                    "message": "Le debit d'air ne peut pas être vide."
                 })
                 continue
 
             if not flow.isdigit():
                 self.on_show_alert_request({
-                    "title": "Entrée invalide",
-                    "message": "Le débit d'air doit être un nombre entier positif."
+                    "title": "Entree invalide",
+                    "message": "Le debit d'air doit être un nombre entier positif."
                 })
                 continue
 
@@ -979,7 +980,7 @@ class GraphicalView(tk.Tk):
         selected_index = data.get("selected_floor_index")
 
         # Update the label text
-        self.currentFloorLabel.config(text=f"Étage sélectionné : {floor_name}")
+        self.currentFloorLabel.config(text=f"etage selectionne : {floor_name}")
 
         # Update the styling of floor buttons
         for i, btn_frame in enumerate(self.floor_buttons):
@@ -1070,8 +1071,8 @@ class GraphicalView(tk.Tk):
             is_selected = (i == selected_index)
             button_bg = self.colors["selected_floor"] if is_selected else "white"
 
-            # Update to match the "+ Nouvel étage" button radius (5px)
-            radius = 5  # Changed from 20 to 5 to match the "+ Nouvel étage" button
+            # Update to match the "+ Nouvel etage" button radius (5px)
+            radius = 5  # Changed from 20 to 5 to match the "+ Nouvel etage" button
 
             # Define the box with some padding
             x1 = 5
@@ -1079,7 +1080,7 @@ class GraphicalView(tk.Tk):
             x2 = available_width - 5
             y2 = button_height - 5
 
-            # Create rounded corners using ovals (similar to "+ Nouvel étage" button)
+            # Create rounded corners using ovals (similar to "+ Nouvel etage" button)
             canvas.create_oval(x1, y1, x1 + 2*radius, y1 + 2*radius, fill=button_bg, outline="")
             canvas.create_oval(x2 - 2*radius, y1, x2, y1 + 2*radius, fill=button_bg, outline="")
             canvas.create_oval(x1, y2 - 2*radius, x1 + 2*radius, y2, fill=button_bg, outline="")
@@ -1132,9 +1133,9 @@ class GraphicalView(tk.Tk):
             self.floor_buttons.append(btn_frame)
 
         if selected_index is not None and 0 <= selected_index < len(floors):
-            self.currentFloorLabel.config(text=f"Étage sélectionné : {floors[selected_index]}")
+            self.currentFloorLabel.config(text=f"etage selectionne : {floors[selected_index]}")
         else:
-            self.currentFloorLabel.config(text="Aucun étage sélectionné")
+            self.currentFloorLabel.config(text="Aucun etage selectionne")
 
         # Check if scrollbar is needed after updating floor buttons
         self.after(10, self._update_floor_scroll)
@@ -1272,8 +1273,8 @@ class GraphicalView(tk.Tk):
 
     def on_set_height(self, floor_index):
         value = simpledialog.askstring(
-            "Hauteur de cet étage",
-            "Entrez la hauteur de cet étage (m) :",
+            "Hauteur de cet etage",
+            "Entrez la hauteur de cet etage (m) :",
             parent=self
         )
         if value:
@@ -1314,7 +1315,7 @@ class GraphicalView(tk.Tk):
 
         x_visible = self.canvas.canvasx(self.canvas.winfo_width()) - 10
         y_visible = self.canvas.canvasy(self.canvas.winfo_height()) - 10
-        txt = f"Hauteur de cet étage : {self.current_floor_height} m"
+        txt = f"Hauteur de cet etage : {self.current_floor_height} m"
         self.height_text_id = self.canvas.create_text(
              x_visible, y_visible,
             anchor="se", text=txt,
@@ -1327,7 +1328,7 @@ class GraphicalView(tk.Tk):
     def on_delete_floor(self, floor_index):
         result = messagebox.askyesno(
             "Confirmer la suppression",
-            f"Êtes-vous sûr de vouloir supprimer cet étage ?\nTous les éléments de cet étage seront perdus.",
+            f"Êtes-vous sûr de vouloir supprimer cet etage ?\nTous les elements de cet etage seront perdus.",
             icon='warning'
         )
         if result:
@@ -1375,20 +1376,22 @@ class GraphicalView(tk.Tk):
                     canvas.itemconfig(item, fill=self.colors["selected_tool"])
 
     def on_save_button_click(self):
-        # For now, just inform the user that the feature is not implemented
-        ivy_bus.publish("show_alert_request", {
-            "title": "Sauvegarde",
-            "message": "Fonctionnalité de sauvegarde à implémenter."
-        })
-        # In a real implementation, you would publish an event for the controller to handle saving
+        ivy_bus.publish("save_project_request", {})
+
 
     def on_import_button_click(self):
-        # For now, just inform the user that the feature is not implemented
-        ivy_bus.publish("show_alert_request", {
-            "title": "Importation",
-            "message": "Fonctionnalité d'importation à implémenter."
+
+        file_path = filedialog.askopenfilename(
+        title="选择 floors.json",
+        filetypes=[("JSON 文件", "*.json")],
+        defaultextension=".json"
+        )
+        if not file_path:
+            return
+
+        ivy_bus.publish("import_project_request", {
+            "json_path": file_path
         })
-        # In a real implementation, you would publish an event for the controller to handle importing
 
     def _truncate_text_with_ellipsis(self, text, max_width, font):
         """Truncates text with ellipsis if it exceeds max_width pixels"""

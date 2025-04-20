@@ -4,6 +4,7 @@ from controller.controller import Controller
 def main():
     controller = Controller()
     app = GraphicalView()
+    controller.attach_view(app)
     app.mainloop()
 
 
