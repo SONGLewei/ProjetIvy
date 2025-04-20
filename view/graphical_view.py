@@ -11,13 +11,20 @@ class GraphicalView(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Application VMC")
-        self.geometry("1000x600")
+
+        # Set initial window size
+        window_width = 1280
+        window_height = 720
+        self.geometry(f"{window_width}x{window_height}")
+
+        # Center the window on the screen
+        self._center_window(window_width, window_height)
 
         self.currentFloorLabel = None
         self.floor_count = 0
         self.current_floor = None
         self.floor_buttons = []
-        self.current_tool = 'select'  # Default tool is already set to select
+        self.current_tool = 'select'  
         self.vent_role = None
         self.vent_color = None
         self.canvas_item_meta = {}
@@ -25,6 +32,10 @@ class GraphicalView(tk.Tk):
         self.tooltips = []  # For storing button tooltips
         self.vent_tooltips = {}  # For storing vent tooltips by canvas item ID
         self.tool_buttons = {}  # Store tool buttons for styling
+        
+        # Onion skin related variables
+        self.onion_skin_items = []  # To track items drawn as part of onion skin
+        self.onion_skin_opacity = 0.3  # 30% opacity for onion skin items
 
         self.hover_after_id = None
         self.current_hover_item = None 
@@ -62,6 +73,7 @@ class GraphicalView(tk.Tk):
         ivy_bus.subscribe("vent_need_info_request",   self.on_vent_need_info_request)
         ivy_bus.subscribe("draw_vent_update",         self.on_draw_vent_update)
         ivy_bus.subscribe("floor_height_update",      self.on_floor_height_update)
+        ivy_bus.subscribe("onion_skin_preview_update", self.on_onion_skin_preview_update)
 
         # Set initial cursor
         self.current_tool = 'select'  # Default tool
@@ -94,6 +106,7 @@ class GraphicalView(tk.Tk):
             'vent':   os.path.join(base_path, 'photos', 'fan.png'),
             'save':   os.path.join(base_path, 'photos', 'diskette.png'),
             'import': os.path.join(base_path, 'photos', 'import.png'),
+            'document': os.path.join(base_path, 'photos', 'document.png'),
         }
         for name, path in icon_paths.items():
             try:
@@ -138,7 +151,7 @@ class GraphicalView(tk.Tk):
         # Create Save button
         save_btn_frame = tk.Frame(leftFrame, bg=self.colors["topbar_bg"])
         save_btn_frame.pack(side=tk.LEFT, padx=(0, 10))
-        
+
         save_canvas = tk.Canvas(
             save_btn_frame,
             width=45,
@@ -148,23 +161,23 @@ class GraphicalView(tk.Tk):
             cursor="hand2"
         )
         save_canvas.pack()
-        
+
         # Add Save icon
         if 'save' in self.icons:
             save_canvas.create_image(45//2, 45//2, image=self.icons['save'])
-        
+
         # Bind click event
         save_canvas.bind("<Button-1>", lambda e: self.on_save_button_click())
-        
+
         # Create tooltip for Save button
         save_tooltip = Tooltip(self)
         save_tooltip._attach_to_widget(save_canvas, "Sauvegarder")
         self.tooltips.append(save_tooltip)
-        
+
         # Create Import button
         import_btn_frame = tk.Frame(leftFrame, bg=self.colors["topbar_bg"])
-        import_btn_frame.pack(side=tk.LEFT)
-        
+        import_btn_frame.pack(side=tk.LEFT, padx=(0, 10))
+
         import_canvas = tk.Canvas(
             import_btn_frame,
             width=45,
@@ -174,19 +187,44 @@ class GraphicalView(tk.Tk):
             cursor="hand2"
         )
         import_canvas.pack()
-        
 
         # Add Import icon
         if 'import' in self.icons:
             import_canvas.create_image(45//2, 45//2, image=self.icons['import'])
-        
+
         # Bind click event
         import_canvas.bind("<Button-1>", lambda e: self.on_import_button_click())
-        
+
         # Create tooltip for Import button
         import_tooltip = Tooltip(self)
         import_tooltip._attach_to_widget(import_canvas, "Importer")
         self.tooltips.append(import_tooltip)
+
+        # Create Document button
+        document_btn_frame = tk.Frame(leftFrame, bg=self.colors["topbar_bg"])
+        document_btn_frame.pack(side=tk.LEFT)
+
+        document_canvas = tk.Canvas(
+            document_btn_frame,
+            width=45,
+            height=45,
+            bg="white",
+            highlightthickness=0,
+            cursor="hand2"
+        )
+        document_canvas.pack()
+
+        # Add Document icon
+        if 'document' in self.icons:
+            document_canvas.create_image(45//2, 45//2, image=self.icons['document'])
+
+        # Bind click event
+        document_canvas.bind("<Button-1>", lambda e: self.on_document_button_click())
+
+        # Create tooltip for Document button
+        document_tooltip = Tooltip(self)
+        document_tooltip._attach_to_widget(document_canvas, "Vue textuelle")
+        self.tooltips.append(document_tooltip)
 
         # Continue with the center frame and other elements
         centerFrame = tk.Frame(topBarFrame, bg=self.colors["topbar_bg"])
@@ -690,19 +728,19 @@ class GraphicalView(tk.Tk):
                 start[0], start[1], end[0], end[1],
                 fill=fill ,width=6,tags=("wall",)
             )
-            
+
             # Calculate wall length in meters (using scale where 40px = 2m from _create_compass_layer)
             dx = end[0] - start[0]
             dy = end[1] - start[1]
             length_px = (dx**2 + dy**2)**0.5
             length_m = length_px * (2.0/40.0)  # Convert to meters based on scale
-            
+
             # Store length data for tooltip
             self.canvas_item_meta[item] = {
                 'text': f"{length_m:.2f}m",
                 'type': 'wall'
             }
-            
+
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def on_draw_window_update(self,data):
@@ -900,12 +938,12 @@ class GraphicalView(tk.Tk):
 
                 # Update text weight and possibly truncate text again with new font weight
                 font_spec = ("Helvetica", 11, "bold" if is_selected else "normal")
-                
+
                 # Get the available width for text
                 available_width = 200 - 20  # Container width minus padding
                 text_padding = 20
                 max_text_width = available_width - (text_padding * 2)
-                
+
                 # Get the full text and truncate if needed
                 if hasattr(canvas, 'full_text'):
                     full_text = canvas.full_text
@@ -913,13 +951,16 @@ class GraphicalView(tk.Tk):
                     full_text = canvas.itemcget(canvas.text_id, 'text')
                     if full_text.endswith('...'):  # Best effort to recover original text
                         full_text = floor_name
-                
+
                 display_text = self._truncate_text_with_ellipsis(full_text, max_text_width, font_spec)
-                
+
                 # Update text and font
                 canvas.itemconfig(canvas.text_id, 
                                   text=display_text,
                                   font=font_spec)
+
+        # After updating floor, request onion skin if available
+        self.after(10, self._request_onion_skin_preview)
 
     def on_new_floor_update(self, data):
         """
@@ -988,15 +1029,15 @@ class GraphicalView(tk.Tk):
             # Store the background shape ID (use the first rectangle as reference)
             shape_id = canvas.create_rectangle(x1, y1 + radius, x2, y2 - radius, fill=button_bg, outline="")
             canvas.tag_lower(shape_id)  # Move it to the back
-            
+
             # Add text, left-aligned with padding
             text_padding = 20
             max_text_width = available_width - (text_padding * 2)  # Available width for text
             font_spec = ("Helvetica", 11, "bold" if is_selected else "normal")
-            
+
             # Truncate text if needed
             display_text = self._truncate_text_with_ellipsis(floor_name, max_text_width, font_spec)
-            
+
             text_id = canvas.create_text(
                 text_padding,
                 button_height / 2,
@@ -1077,7 +1118,11 @@ class GraphicalView(tk.Tk):
         messagebox.showwarning(title, message)
 
     def on_clear_canvas_update(self, data):
+        # Clear the main canvas
         self.canvas.delete("all")
+        self.canvas_item_meta = {}  # Clear meta data
+        self.vent_tooltips = {}  # Clear vent tooltips
+        self.onion_skin_items = []  # Clear onion skin items
         if self.height_text_id:
             self.canvas.delete(self.height_text_id)
             self.height_text_id = None
@@ -1097,7 +1142,7 @@ class GraphicalView(tk.Tk):
         if item in self.canvas_item_meta:
             meta_data = self.canvas_item_meta[item]
             item_type = meta_data.get('type', '') if isinstance(meta_data, dict) else ''
-            
+
             if item_type == 'wall':
                 # For walls, use the main tooltip
                 tooltip_text = meta_data['text']
@@ -1272,15 +1317,15 @@ class GraphicalView(tk.Tk):
         """Truncates text with ellipsis if it exceeds max_width pixels"""
         # Get Tkinter font object to measure text width
         font_obj = tk.font.Font(family=font[0], size=font[1], weight=font[2] if len(font) > 2 else "normal")
-        
+
         # If text fits, return it as is
         if font_obj.measure(text) <= max_width:
             return text
-        
+
         # Truncate with ellipsis
         ellipsis = "..."
         ellipsis_width = font_obj.measure(ellipsis)
-        
+
         # Start with empty result and add characters one by one
         result = ""
         for char in text:
@@ -1288,5 +1333,145 @@ class GraphicalView(tk.Tk):
             if font_obj.measure(result + char) + ellipsis_width > max_width:
                 return result + ellipsis
             result += char
-        
+
         return result  # Shouldn't reach here, but just in case
+
+    def _center_window(self, width, height):
+        """Center the window on the screen"""
+        # Get screen dimensions
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+
+        # Calculate position coordinates
+        x = (screen_width - width) // 2
+        y = (screen_height - height) // 2
+
+        # Set window position
+        self.geometry(f"+{x}+{y}")
+
+    def _request_onion_skin_preview(self):
+        """Request the onion skin preview of the floor below"""
+        if hasattr(self, 'currentFloorLabel') and self.currentFloorLabel:
+            ivy_bus.publish("onion_skin_preview_request", {})
+            
+    def draw_onion_skin_item(self, item_type, coords, fill_color=None, thickness=None, additional_data=None):
+        """Draw an item as part of the onion skin with reduced opacity"""
+        # Remove any existing onion skin items
+        item_id = None
+        opacity_color = self._apply_opacity_to_color(fill_color, self.onion_skin_opacity)
+        
+        if item_type == "wall":
+            start, end = coords
+            item_id = self.canvas.create_line(
+                start[0], start[1], end[0], end[1],
+                fill=opacity_color, width=3, tags=("onion_skin",)
+            )
+        elif item_type == "window":
+            start, end = coords
+            thickness = thickness or 5
+            item_id = self.canvas.create_line(
+                start[0], start[1], end[0], end[1],
+                fill=opacity_color, width=thickness, tags=("onion_skin",)
+            )
+        elif item_type == "door":
+            start, end = coords
+            thickness = thickness or 5
+            item_id = self.canvas.create_line(
+                start[0], start[1], end[0], end[1],
+                fill=opacity_color, width=thickness, tags=("onion_skin",)
+            )
+        elif item_type == "vent":
+            start, end = coords
+            # Calculate the line angle for the arrow
+            import math
+            dx = end[0] - start[0]
+            dy = end[1] - start[1]
+            length = math.sqrt(dx*dx + dy*dy)
+            
+            if length > 0:
+                dx, dy = dx/length, dy/length
+                
+                # Create the base line
+                item_id = self.canvas.create_line(
+                    start[0], start[1], end[0], end[1],
+                    fill=opacity_color, width=2, tags=("onion_skin",)
+                )
+            
+                # Store this onion skin item
+                self.onion_skin_items.append(item_id)
+                
+                # Add arrowhead
+                arrow_size = 8
+                arrow_angle = 0.5  # in radians, determines arrow width
+                
+                # Calculate the arrowhead points
+                arrow_x1 = end[0] - arrow_size * (dx * math.cos(arrow_angle) - dy * math.sin(arrow_angle))
+                arrow_y1 = end[1] - arrow_size * (dy * math.cos(arrow_angle) + dx * math.sin(arrow_angle))
+                arrow_x2 = end[0] - arrow_size * (dx * math.cos(arrow_angle) + dy * math.sin(arrow_angle))
+                arrow_y2 = end[1] - arrow_size * (dy * math.cos(arrow_angle) - dx * math.sin(arrow_angle))
+                
+                # Create arrowhead
+                arrowhead_id = self.canvas.create_polygon(
+                    end[0], end[1], arrow_x1, arrow_y1, arrow_x2, arrow_y2,
+                    fill=opacity_color, outline=opacity_color, tags=("onion_skin",)
+                )
+                
+                self.onion_skin_items.append(arrowhead_id)
+        
+        if item_id:
+            self.onion_skin_items.append(item_id)
+            # Lower the item to ensure it appears below all active floor items
+            self.canvas.tag_lower(item_id)
+            
+    def _apply_opacity_to_color(self, color, opacity):
+        """Convert color to rgba with opacity"""
+        if not color or color == "":
+            color = "#000000"  # Default to black
+            
+        # Handle named colors
+        if color == "black":
+            color = "#000000"
+        elif color == "#EE82EE":  # Window color
+            color = "#EE82EE"
+        elif color == "#8B4513":  # Door color
+            color = "#8B4513"
+            
+        # For hex colors, mix with white background to create opacity effect
+        if color.startswith("#"):
+            r = int(color[1:3], 16)
+            g = int(color[3:5], 16) if len(color) >= 5 else r
+            b = int(color[5:7], 16) if len(color) >= 7 else g
+            
+            # Mix with white (255,255,255) based on opacity
+            r = int(r * opacity + 255 * (1 - opacity))
+            g = int(g * opacity + 255 * (1 - opacity))
+            b = int(b * opacity + 255 * (1 - opacity))
+            
+            return f"#{r:02x}{g:02x}{b:02x}"
+            
+        return color  # Return original if we can't process it
+            
+    def clear_onion_skin(self):
+        """Clear all onion skin preview items"""
+        for item_id in self.onion_skin_items:
+            self.canvas.delete(item_id)
+        self.onion_skin_items = []
+        
+    def on_onion_skin_preview_update(self, data):
+        """Handle onion skin preview update from controller"""
+        # Clear any existing onion skin items
+        self.clear_onion_skin()
+        
+        # Check if we have data to draw
+        if not data or "items" not in data:
+            return
+            
+        # Draw each item in the onion skin preview
+        for item in data["items"]:
+            item_type = item.get("type")
+            coords = item.get("coords")
+            fill = item.get("fill", "")
+            thickness = item.get("thickness")
+            additional_data = item.get("additional_data")
+            
+            self.draw_onion_skin_item(item_type, coords, fill, thickness, additional_data)
