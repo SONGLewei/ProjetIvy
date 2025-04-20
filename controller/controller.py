@@ -17,7 +17,7 @@ class Controller:
         self.floor_count = 0
         
         # Create default Floor 0
-        default_floor = Floor("etage 0")
+        default_floor = Floor("Etage 0")
         self.floors.append(default_floor)
         self.selected_floor_index = 0
         
@@ -455,7 +455,7 @@ class Controller:
         Clear automatic the canvas
         """
         ivy_bus.publish("clear_canvas_update", {})
-        new_floor_name = f"etage {len(self.floors)}"
+        new_floor_name = f"Etage {len(self.floors)}"
         new_floor = Floor(new_floor_name)
 
         if self.selected_floor_index is None:
@@ -670,106 +670,27 @@ class Controller:
             "floor_below_name": floor_below.name
         })
 
-    def handle_save_project_request(self, _data):
+    def handle_save_project_request(self, data):
         """
-        Save as：
-        └─ save_20250421_153730/
-           ├─ floors.json
-           ├─ floor_0.png
-           ├─ floor_1.png
-           └─ ...
+        Save project to the selected JSON file
         """
         json_data = [floor.to_dict() for floor in self.floors]
-
-        folder_name = simpledialog.askstring(
-            "Nom du dossier",
-            "Entrez le nom du dossier pour enregistrer le projet :"
-        )
-
-        if not folder_name or not folder_name.strip():
+        
+        # Get the JSON file path from the data
+        json_file_path = data.get("json_file_path")
+        
+        if not json_file_path:
+            # Use a timestamped file in current working directory as fallback
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            folder_name = f"save_{ts}"
-        else:
-            import re
-            folder_name = re.sub(r'[\\/:*?"<>|]', '_', folder_name).strip()
+            json_file_path = os.path.join(os.getcwd(), f"floors_{ts}.json")
 
-        save_dir = os.path.join(os.getcwd(), folder_name)
-        os.makedirs(save_dir, exist_ok=True)
-
-        json_path  = os.path.join(save_dir, "floors.json")
-        with open(json_path, "w", encoding="utf-8") as f:
+        # Save the JSON file
+        with open(json_file_path, "w", encoding="utf-8") as f:
             json.dump(json_data, f, indent=4, ensure_ascii=False)
-
-        for idx, floor in enumerate(self.floors):
-            xs, ys = [], []
-            for w in floor.walls:
-                xs += [w.start[0], w.end[0]]
-                ys += [w.start[1], w.end[1]]
-            for win in floor.windows:
-                xs += [win.start[0], win.end[0]]
-                ys += [win.start[1], win.end[1]]
-            for d in floor.doors:
-                xs += [d.start[0], d.end[0]]
-                ys += [d.start[1], d.end[1]]
-            for v in floor.vents:
-                xs += [v.start[0], v.end[0]]
-                ys += [v.start[1], v.end[1]]
-
-            if not xs or not ys:
-                Image.new("RGB", (600, 400), "white").save(
-                    os.path.join(save_dir, f"floor_{idx}.png"))
-                continue
-
-            x_min, x_max = min(xs), max(xs)
-            y_min, y_max = min(ys), max(ys)
-
-            MARGIN = 30
-            W = int(math.ceil(x_max - x_min + 2 * MARGIN))
-            H = int(math.ceil(y_max - y_min + 2 * MARGIN))
-
-            img  = Image.new("RGB", (W, H), "white")
-            draw = ImageDraw.Draw(img)
-
-            def tr(p):
-                return (int(round(p[0] - x_min + MARGIN)),
-                        int(round(p[1] - y_min + MARGIN)))
-
-            for w in floor.walls:
-                draw.line([tr(w.start), tr(w.end)],
-                          fill="black", width=6)
-
-            for win in floor.windows:
-                draw.line([tr(win.start), tr(win.end)],
-                          fill="#EE82EE", width=win.thickness)
-
-            for d in floor.doors:
-                draw.line([tr(d.start), tr(d.end)],
-                          fill="#8B4513", width=d.thickness)
-
-            for v in floor.vents:
-                p1, p2 = tr(v.start), tr(v.end)
-                draw.line([p1, p2], fill=v.color, width=2)
-
-                dx, dy = p2[0] - p1[0], p2[1] - p1[1]
-                length = math.hypot(dx, dy) or 1
-                ux, uy = dx / length, dy / length
-
-                arrow_len = 10
-                arrow_wid = 5
-                left  = (p2[0] - arrow_len * ux + arrow_wid * uy,
-                         p2[1] - arrow_len * uy - arrow_wid * ux)
-                right = (p2[0] - arrow_len * ux - arrow_wid * uy,
-                         p2[1] - arrow_len * uy + arrow_wid * ux)
-                draw.polygon([p2, left, right], fill=v.color)
-
-            safe_name = ''.join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in floor.name).strip()
-            safe_name = safe_name.replace(' ', '_') or f"floor_{idx}"
-            img_path = os.path.join(save_dir, f"{safe_name}.png")
-            img.save(img_path)
 
         ivy_bus.publish("show_alert_request", {
             "title": "Enregistré avec succès",
-            "message": f"Projet enregistré dans le dossier: \n{save_dir}"
+            "message": f"Projet enregistré dans le fichier: \n{json_file_path}"
         })
 
     def handle_import_project_request(self, data):
@@ -794,7 +715,7 @@ class Controller:
 
         new_floors = []
         for f_dict in floors_data:
-            floor_obj = Floor(f_dict.get("name", "etage ?"))
+            floor_obj = Floor(f_dict.get("name", "Etage ?"))
             floor_obj.height = f_dict.get("height", 2.5)
 
             # walls

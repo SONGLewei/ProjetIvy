@@ -270,7 +270,7 @@ class GraphicalView(tk.Tk):
             65, 20,
             text="+ Nouvel etage",
             fill="white",
-            font=("Helvetica", 11, "bold")
+            font=("Helvetica", 14, "bold")
         )
 
         # Bind click event
@@ -340,7 +340,7 @@ class GraphicalView(tk.Tk):
         scrollWrap.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10)  # Add padding inside the container
 
         # Add a "etage" label at the top of the floor list
-        floor_title = tk.Label(scrollWrap, text="etage", font=("Helvetica", 12), fg="#2f3039", bg="white")
+        floor_title = tk.Label(scrollWrap, text="Etage(s) :", font=("Helvetica", 14), fg="#2f3039", bg="white")
         floor_title.pack(side=tk.TOP, anchor="w", pady=(10, 10))
 
         self.floorCanvas = tk.Canvas(
@@ -980,7 +980,7 @@ class GraphicalView(tk.Tk):
         selected_index = data.get("selected_floor_index")
 
         # Update the label text
-        self.currentFloorLabel.config(text=f"etage selectionne : {floor_name}")
+        self.currentFloorLabel.config(text=f"Etage selectionne : {floor_name}")
 
         # Update the styling of floor buttons
         for i, btn_frame in enumerate(self.floor_buttons):
@@ -1098,7 +1098,7 @@ class GraphicalView(tk.Tk):
             # Add text, left-aligned with padding
             text_padding = 20
             max_text_width = available_width - (text_padding * 2)  # Available width for text
-            font_spec = ("Helvetica", 11, "bold" if is_selected else "normal")
+            font_spec = ("Helvetica", 12, "bold" if is_selected else "normal")
 
             # Truncate text if needed
             display_text = self._truncate_text_with_ellipsis(floor_name, max_text_width, font_spec)
@@ -1133,7 +1133,7 @@ class GraphicalView(tk.Tk):
             self.floor_buttons.append(btn_frame)
 
         if selected_index is not None and 0 <= selected_index < len(floors):
-            self.currentFloorLabel.config(text=f"etage selectionne : {floors[selected_index]}")
+            self.currentFloorLabel.config(text=f"Etage selectionne : {floors[selected_index]}")
         else:
             self.currentFloorLabel.config(text="Aucun etage selectionne")
 
@@ -1376,8 +1376,20 @@ class GraphicalView(tk.Tk):
                     canvas.itemconfig(item, fill=self.colors["selected_tool"])
 
     def on_save_button_click(self):
-        ivy_bus.publish("save_project_request", {})
-
+        json_file_path = filedialog.asksaveasfilename(
+            title="Enregistrer le projet",
+            defaultextension=".json",
+            filetypes=[("Fichier JSON", "*.json")],
+            initialdir=os.getcwd(),
+            initialfile="floors.json"
+        )
+        
+        if not json_file_path:
+            return  # User cancelled the dialog
+            
+        ivy_bus.publish("save_project_request", {
+            "json_file_path": json_file_path
+        })
 
     def on_import_button_click(self):
 
