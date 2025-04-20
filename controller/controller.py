@@ -7,6 +7,7 @@ from model.floor import Floor
 from model.window import Window
 from model.door import Door
 from model.vent import Vent
+from tkinter import simpledialog
 
 class Controller:
     def __init__(self):
@@ -680,8 +681,19 @@ class Controller:
         """
         json_data = [floor.to_dict() for floor in self.floors]
 
-        ts         = datetime.now().strftime("%Y%m%d_%H%M%S")
-        save_dir   = os.path.join(os.getcwd(), f"save_{ts}")
+        folder_name = simpledialog.askstring(
+            "Nom du dossier",
+            "Entrez le nom du dossier pour enregistrer le projet :"
+        )
+
+        if not folder_name or not folder_name.strip():
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            folder_name = f"save_{ts}"
+        else:
+            import re
+            folder_name = re.sub(r'[\\/:*?"<>|]', '_', folder_name).strip()
+
+        save_dir = os.path.join(os.getcwd(), folder_name)
         os.makedirs(save_dir, exist_ok=True)
 
         json_path  = os.path.join(save_dir, "floors.json")
