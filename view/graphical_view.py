@@ -270,7 +270,7 @@ class GraphicalView(tk.Tk):
             65, 20,
             text="+ Nouvel etage",
             fill="white",
-            font=("Helvetica", 14, "bold")
+            font=("Helvetica", 12, "bold")
         )
 
         # Bind click event
