@@ -535,7 +535,19 @@ class GraphicalView(tk.Tk):
             items = self.canvas.find_overlapping(event.x, event.y, event.x, event.y)
             if not items:
                 return
-            item = items[-1]
+                
+            # Find items that are not part of the onion skin
+            non_onion_items = []
+            for item in items:
+                tags = self.canvas.gettags(item)
+                if "onion_skin" not in tags:
+                    non_onion_items.append(item)
+                    
+            if not non_onion_items:
+                return
+                
+            # Get the topmost non-onion item
+            item = non_onion_items[-1]
             tags = self.canvas.gettags(item)
             if not tags:
                 return
@@ -742,6 +754,9 @@ class GraphicalView(tk.Tk):
             }
 
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            
+            # Ensure all onion skin items remain below
+            self._ensure_onion_skin_below()
 
     def on_draw_window_update(self,data):
         start = data.get("start")
@@ -767,6 +782,9 @@ class GraphicalView(tk.Tk):
                 fill=fill ,width=thickness, tags=("window",)
             )
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            
+            # Ensure all onion skin items remain below
+            self._ensure_onion_skin_below()
 
     def on_draw_door_update(self,data):
         start = data.get("start")
@@ -792,6 +810,9 @@ class GraphicalView(tk.Tk):
                 fill=fill,width=thickness,tags=("door",)
             )
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            
+            # Ensure all onion skin items remain below
+            self._ensure_onion_skin_below()
 
     def on_draw_vent_update(self, data):
         start, end = data["start"], data["end"]
@@ -808,31 +829,62 @@ class GraphicalView(tk.Tk):
             if hasattr(self, "temp_vent"):
                 self.canvas.delete(self.temp_vent)
                 del self.temp_vent
-            item = self.canvas.create_line(
-                start[0], start[1], end[0], end[1],
-                fill=color, width=4, tags=("vent",)
-            )
-            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+                
+            # Calculate line angle for the arrow
+            import math
+            dx = end[0] - start[0]
+            dy = end[1] - start[1]
+            length = math.sqrt(dx*dx + dy*dy)
+            
+            if length > 0:
+                dx, dy = dx/length, dy/length
+                
+                # Create the base line (using width=2 to match the onion skin)
+                item = self.canvas.create_line(
+                    start[0], start[1], end[0], end[1],
+                    fill=color, width=2, tags=("vent",)
+                )
+                
+                # Add arrowhead
+                arrow_size = 8
+                arrow_angle = 0.5  # in radians, determines arrow width
+                
+                # Calculate the arrowhead points
+                arrow_x1 = end[0] - arrow_size * (dx * math.cos(arrow_angle) - dy * math.sin(arrow_angle))
+                arrow_y1 = end[1] - arrow_size * (dy * math.cos(arrow_angle) + dx * math.sin(arrow_angle))
+                arrow_x2 = end[0] - arrow_size * (dx * math.cos(arrow_angle) + dy * math.sin(arrow_angle))
+                arrow_y2 = end[1] - arrow_size * (dy * math.cos(arrow_angle) - dx * math.sin(arrow_angle))
+                
+                # Create arrowhead with the same tag as the line
+                arrowhead = self.canvas.create_polygon(
+                    end[0], end[1], arrow_x1, arrow_y1, arrow_x2, arrow_y2,
+                    fill=color, outline=color, tags=("vent",)
+                )
+                
+                self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
-            # Create well-formatted tooltip content with explicit strings
-            name = data.get('name', '')
-            diameter = data.get('diameter', '')
-            flow = data.get('flow', '')
-            role = data.get('role', '')
+                # Create well-formatted tooltip content with explicit strings
+                name = data.get('name', '')
+                diameter = data.get('diameter', '')
+                flow = data.get('flow', '')
+                role = data.get('role', '')
 
-            meta = f"{name}\nØ {diameter} mm\n{flow} m³/h\n{role}"
+                meta = f"{name}\nØ {diameter} mm\n{flow} m³/h\n{role}"
 
-            # Ensure meta data is not empty
-            if meta and meta.strip():
-                # Store both formatted text and individual components
-                self.canvas_item_meta[item] = {
-                    'text': meta,
-                    'name': name,
-                    'diameter': diameter,
-                    'flow': flow,
-                    'role': role,
-                    'type': 'vent'  # Add type field for consistency
-                }
+                # Ensure meta data is not empty
+                if meta and meta.strip():
+                    # Store both formatted text and individual components
+                    self.canvas_item_meta[item] = {
+                        'text': meta,
+                        'name': name,
+                        'diameter': diameter,
+                        'flow': flow,
+                        'role': role,
+                        'type': 'vent'  # Add type field for consistency
+                    }
+                    
+                # Ensure all onion skin items remain below
+                self._ensure_onion_skin_below()
 
     def on_vent_need_info_request(self, data):
         start, end = data["start"], data["end"]
@@ -1391,7 +1443,7 @@ class GraphicalView(tk.Tk):
             if length > 0:
                 dx, dy = dx/length, dy/length
                 
-                # Create the base line
+                # Create the base line (using width=2 to match main view)
                 item_id = self.canvas.create_line(
                     start[0], start[1], end[0], end[1],
                     fill=opacity_color, width=2, tags=("onion_skin",)
@@ -1420,9 +1472,7 @@ class GraphicalView(tk.Tk):
         
         if item_id:
             self.onion_skin_items.append(item_id)
-            # Lower the item to ensure it appears below all active floor items
-            self.canvas.tag_lower(item_id)
-            
+
     def _apply_opacity_to_color(self, color, opacity):
         """Convert color to rgba with opacity"""
         if not color or color == "":
@@ -1475,3 +1525,19 @@ class GraphicalView(tk.Tk):
             additional_data = item.get("additional_data")
             
             self.draw_onion_skin_item(item_type, coords, fill, thickness, additional_data)
+            
+        # Ensure all onion skin items are at the bottom of the z-order
+        self._ensure_onion_skin_below()
+        
+    def _ensure_onion_skin_below(self):
+        """Ensure all onion skin items are below all other canvas items"""
+        # First, lower all onion skin items
+        for item_id in self.onion_skin_items:
+            self.canvas.tag_lower(item_id)
+            
+        # Then raise all regular items (walls, windows, doors, vents) above onion skin
+        all_items = self.canvas.find_all()
+        for item in all_items:
+            tags = self.canvas.gettags(item)
+            if tags and "onion_skin" not in tags:
+                self.canvas.tag_raise(item)

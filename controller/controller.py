@@ -100,6 +100,11 @@ class Controller:
                     self._send_onion_skin_preview()
                     # Restore current floor index
                     self.selected_floor_index = current_idx
+                
+                # Also refresh the onion skin of the current floor if we're above floor 0
+                # Not using elif so both conditions can be true for middle floors
+                if self.selected_floor_index > 0:
+                    self._send_onion_skin_preview()
 
         elif is_preview:
             if self.wall_start_point is not None:
@@ -167,6 +172,11 @@ class Controller:
                     self._send_onion_skin_preview()
                     # Restore current floor index
                     self.selected_floor_index = current_idx
+                
+                # Also refresh the onion skin of the current floor if we're above floor 0
+                # Not using elif so both conditions can be true for middle floors
+                if self.selected_floor_index > 0:
+                    self._send_onion_skin_preview()
 
         elif is_preview:
             if self.window_start_point is not None:
@@ -235,6 +245,11 @@ class Controller:
                     self._send_onion_skin_preview()
                     # Restore current floor index
                     self.selected_floor_index = current_idx
+                
+                # Also refresh the onion skin of the current floor if we're above floor 0
+                # Not using elif so both conditions can be true for middle floors
+                if self.selected_floor_index > 0:
+                    self._send_onion_skin_preview()
 
         elif is_preview:
             if self.door_start_point is not None:
@@ -352,6 +367,11 @@ class Controller:
                 self._send_onion_skin_preview()
                 # Restore current floor index
                 self.selected_floor_index = current_idx
+            
+            # Also refresh the onion skin of the current floor if we're above floor 0
+            # Not using elif so both conditions can be true for middle floors
+            if self.selected_floor_index > 0:
+                self._send_onion_skin_preview()
                 
         # Reset temporary variables
         self.temp_vent_start = self.temp_vent_end = None
@@ -380,7 +400,7 @@ class Controller:
                 ivy_bus.publish("draw_window_update", {
                     "start": window_obj.start,
                     "end":   window_obj.end,
-                    "fill":  "black",
+                    "fill":  "#EE82EE",
                     "thickness": window_obj.thickness
                 })
 
@@ -388,7 +408,7 @@ class Controller:
                 ivy_bus.publish("draw_door_update", {
                     "start": door_objet.start,
                     "end":   door_objet.end,
-                    "fill":  "black",
+                    "fill":  "#8B4513",
                     "thickness": door_objet.thickness
                 })
 
@@ -445,6 +465,10 @@ class Controller:
         })
 
         self._publish_height(new_floor)
+        
+        # Send onion skin preview if we're not on the first floor
+        if self.selected_floor_index > 0:
+            self._send_onion_skin_preview()
 
     def handle_tool_selected_request(self, data):
         """
