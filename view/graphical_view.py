@@ -23,19 +23,23 @@ class GraphicalView(tk.Tk):
         self.tooltip = Tooltip(self)
         self.tooltips = []  # For storing button tooltips
         self.vent_tooltips = {}  # For storing vent tooltips by canvas item ID
+        self.tool_buttons = {}  # Store tool buttons for styling
 
         self.hover_after_id = None
         self.current_hover_item = None 
         self.height_text_id = None
         self.current_floor_height = None
 
-        
-        
         self.colors = {
-            "topbar_bg":    "#f4f4f4",
-            "main_bg":      "#e8e8e8",
-            "canvas_bg":    "#fafafa",
-            "toolbar_bg":   "#dadada",
+            "topbar_bg": "white",  # White top bar
+            "main_bg": "#f5f7fa",  # Light gray for main background
+            "canvas_bg": "white",  # White canvas background
+            "toolbar_bg": "#f0f0f0",  # Light gray for toolbar
+            "button_bg": "#ffffff",  # White for buttons
+            "selected_tool": "#dde1f7",  # Modern UI blue color
+            "selected_floor": "#f0f3ff",  # Light blue for selected floor
+            "unselected_floor": "white",  # White for unselected floor
+            "floor_text": "#2f3039",  # Dark gray for floor text
         }
 
         self.icons = {}
@@ -57,10 +61,10 @@ class GraphicalView(tk.Tk):
         ivy_bus.subscribe("vent_need_info_request",   self.on_vent_need_info_request)
         ivy_bus.subscribe("draw_vent_update",         self.on_draw_vent_update)
         ivy_bus.subscribe("floor_height_update",      self.on_floor_height_update)
-        
+
         # Set initial cursor
         self.current_tool = 'select'  # Default tool
-        
+
         # Request the initial floor information from the controller
         self.after(100, self._request_initial_floor)
         self.after(100, self._update_cursor)
@@ -68,8 +72,11 @@ class GraphicalView(tk.Tk):
     def _setup_style(self):
         style = ttk.Style(self)
         style.theme_use("clam")
-        style.configure("TButton",font=("Helvetica", 10),padding=6,foreground="black")
-        style.configure("FloorLabel.TLabel",font=("Arial", 13, "bold"),foreground="#333")
+        style.configure("TButton", font=("Helvetica", 10), padding=6, foreground="black")
+        style.configure("FloorLabel.TLabel", font=("Arial", 13, "bold"), foreground="#333333", background="white")
+        style.configure("Floor.TButton", font=("Helvetica", 11), padding=8)
+        style.configure("SelectedFloor.TButton", font=("Helvetica", 11, "bold"), padding=8, background="#e8eeff")
+        style.map("SelectedFloor.TButton", background=[("active", "#d8e0ff")])
 
     def _load_icons(self):
         base_path = os.path.dirname(os.path.abspath(__file__))
@@ -78,117 +85,199 @@ class GraphicalView(tk.Tk):
             'eraser': os.path.join(base_path, 'photos', 'eraser.png'),
             'wall':   os.path.join(base_path, 'photos', 'wall.png'),
             'window': os.path.join(base_path, 'photos', 'window.png'),
-            'door':   os.path.join(base_path, 'photos', 'door1.png'),
-            'vent':   os.path.join(base_path, 'photos', 'vent.png'),
+            'door':   os.path.join(base_path, 'photos', 'door.png'),
+            'vent':   os.path.join(base_path, 'photos', 'fan.png'),
         }
         for name, path in icon_paths.items():
             try:
-                icon = PhotoImage(file=path).subsample(7, 7)
+                # Load original image without subsampling
+                icon = PhotoImage(file=path)
+                # Resize to fit within toolbar buttons
+                icon = self._resize_image(icon, 32, 32)  # Slightly smaller than button to have some padding
                 self.icons[name] = icon
             except Exception as e:
                 print(f"fail to load {name} : {e}")
 
+    def _resize_image(self, img, width, height):
+        """Resize an image to the specified dimensions"""
+        # Get original dimensions
+        original_width = img.width()
+        original_height = img.height()
+
+        # Calculate subsample rates
+        width_subsample = max(1, int(original_width / width))
+        height_subsample = max(1, int(original_height / height))
+
+        # Use the larger subsample rate to ensure the image fits
+        subsample = max(width_subsample, height_subsample)
+
+        return img.subsample(subsample, subsample)
+
     def _create_layout(self):
         # 3 parts of the UI
         self._create_top_bar()
-        ttk.Separator(self, orient="horizontal").pack(side=tk.TOP, fill=tk.X)
         self._create_main_area()
-        ttk.Separator(self, orient="horizontal").pack(side=tk.BOTTOM, fill=tk.X)
         self._create_bottom_toolbar()
 
     def _create_top_bar(self):
+        # Create top bar with white background
         topBarFrame = tk.Frame(self, bg=self.colors["topbar_bg"])
         topBarFrame.pack(side=tk.TOP, fill=tk.X)
+
+        # Remove the separator - we don't want double borders
+        # sep = ttk.Separator(self, orient="horizontal")
+        # sep.pack(side=tk.TOP, fill=tk.X)
 
         centerFrame = tk.Frame(topBarFrame, bg=self.colors["topbar_bg"])
         centerFrame.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        self.currentFloorLabel = ttk.Label(centerFrame,
+        # Create label with white background
+        label_frame = tk.Frame(centerFrame, bg="white", padx=15, pady=8)
+        label_frame.pack(anchor="center", pady=5)
+
+        self.currentFloorLabel = ttk.Label(label_frame,
                                            text="Aucun étage sélectionné",
                                            style="FloorLabel.TLabel")
-        self.currentFloorLabel.pack(anchor="center", pady=5)
-        
-        new_floor_btn = ttk.Button(topBarFrame, text="Nouvel étage", command=self.on_new_floor_button_click)
-        new_floor_btn.pack(side=tk.RIGHT, padx=(10, 20), pady=10)
+        self.currentFloorLabel.pack(anchor="center")
 
+        # New floor button with plus icon and rounded corners
+        new_floor_canvas = tk.Canvas(
+            topBarFrame,
+            width=130,
+            height=40,
+            bg=self.colors["topbar_bg"],
+            highlightthickness=0
+        )
+        new_floor_canvas.pack(side=tk.RIGHT, padx=(10, 20), pady=10)
+
+        # Draw rounded rectangle with 5px radius
+        radius = 5
+        button_color = "#6bbb6d"
+
+        # Create rounded corners using ovals
+        new_floor_canvas.create_oval(0, 0, 2*radius, 2*radius, fill=button_color, outline="")
+        new_floor_canvas.create_oval(130-2*radius, 0, 130, 2*radius, fill=button_color, outline="")
+        new_floor_canvas.create_oval(0, 40-2*radius, 2*radius, 40, fill=button_color, outline="")
+        new_floor_canvas.create_oval(130-2*radius, 40-2*radius, 130, 40, fill=button_color, outline="")
+
+        # Create rectangles to complete the rounded shape
+        new_floor_canvas.create_rectangle(radius, 0, 130-radius, 40, fill=button_color, outline="")
+        new_floor_canvas.create_rectangle(0, radius, 130, 40-radius, fill=button_color, outline="")
+
+        # Add text
+        new_floor_canvas.create_text(
+            65, 20,
+            text="+ Nouvel étage",
+            fill="white",
+            font=("Helvetica", 11, "bold")
+        )
+
+        # Bind click event
+        new_floor_canvas.bind("<Button-1>", lambda e: self.on_new_floor_button_click())
     def _create_main_area(self):
-        mainFrame = tk.Frame(self, bg=self.colors["main_bg"])
+        mainFrame = tk.Frame(self, bg="white")  # Main frame background
         mainFrame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        # left part
-        drawWrap = tk.Frame(mainFrame, bg=self.colors["canvas_bg"])
-        drawWrap.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=20, pady=20)
+        # left part with white background
+        drawWrap = tk.Frame(mainFrame, bg="white")
+        drawWrap.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 0), pady=(0, 0))
 
+        # Create scrollbars but don't pack them - they'll be functional but invisible
         vbar = ttk.Scrollbar(drawWrap, orient="vertical")
         hbar = ttk.Scrollbar(drawWrap, orient="horizontal")
-        vbar.pack(side=tk.RIGHT, fill=tk.Y)
-        hbar.pack(side=tk.BOTTOM, fill=tk.X)
 
+        # Create canvas with border on right and bottom
         self.canvas = tk.Canvas(
-            drawWrap, bg="white", highlightthickness=0,
+            drawWrap, bg="white", highlightthickness=1,
+            highlightbackground="#cccccc",
             xscrollcommand=hbar.set, yscrollcommand=vbar.set
         )
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Connect scrollbars to canvas (without displaying them)
+        vbar.config(command=self.canvas.yview)
+        hbar.config(command=self.canvas.xview)
+
         def _on_canvas_configure(evt):
             self.canvas.configure(scrollregion=self.canvas.bbox("all") or (0, 0, 0, 0))
             self._redraw_height_text()
 
         self.canvas.bind("<Configure>", _on_canvas_configure)
 
-        vbar.config(command=self.canvas.yview)
-        hbar.config(command=self.canvas.xview)
-
+        # Bind mousewheel events for scrolling
+        self.canvas.bind("<MouseWheel>", lambda event: self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units"))
+        self.canvas.bind("<Shift-MouseWheel>", lambda event: self.canvas.xview_scroll(int(-1 * (event.delta / 120)), "units"))
+        # For Linux/macOS
+        self.canvas.bind("<Button-4>", lambda event: self.canvas.yview_scroll(-1, "units"))
+        self.canvas.bind("<Button-5>", lambda event: self.canvas.yview_scroll(1, "units"))
+        self.canvas.bind("<Shift-Button-4>", lambda event: self.canvas.xview_scroll(-1, "units"))
+        self.canvas.bind("<Shift-Button-5>", lambda event: self.canvas.xview_scroll(1, "units"))
 
         self.canvas.bind("<Button-1>", self.on_canvas_left_click)
         self.canvas.bind("<Button-3>", self.on_canvas_right_click)
         self.canvas.bind("<Motion>",   self.on_canvas_move)
         self.canvas.bind("<Leave>", self.on_canvas_leave)
 
-        #self._create_compass_layer(canvasFrame)
+        # Create compass layer
         self._create_compass_layer(drawWrap)
 
-        # line to seperate
-        sep = ttk.Separator(mainFrame, orient="vertical")
-        sep.pack(side=tk.RIGHT, fill=tk.Y, pady=20)
+        # Vertical separator line instead of ttk.Separator
+        sep_frame = tk.Frame(mainFrame, width=1, bg="#cccccc")
+        sep_frame.pack(side=tk.RIGHT, fill=tk.Y, pady=(0, 0))  # Removed top padding
 
-        scrollWrap = tk.Frame(mainFrame, bg=self.colors["main_bg"])
-        scrollWrap.pack(side=tk.RIGHT, fill=tk.Y, padx=20, pady=20)
+        # Right panel container with borders on top and bottom
+        rightContainer = tk.Frame(mainFrame, bg="white", width=200)  # Increased from 150 to 160
+        rightContainer.pack(side=tk.RIGHT, fill=tk.Y, padx=0, pady=(0, 0))  # Removed top padding
+        rightContainer.pack_propagate(False)  # Prevent the container from shrinking
+
+        # Top border for right panel - we're keeping this one
+        tk.Frame(rightContainer, height=1, bg="#cccccc").pack(side=tk.TOP, fill=tk.X)
+
+        # Main scrollable area for floors
+        scrollWrap = tk.Frame(rightContainer, bg="white")
+        scrollWrap.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10)  # Add padding inside the container
+
+        # Add a "Étage" label at the top of the floor list
+        floor_title = tk.Label(scrollWrap, text="Étage", font=("Helvetica", 12), fg="#2f3039", bg="white")
+        floor_title.pack(side=tk.TOP, anchor="w", pady=(10, 10))
 
         self.floorCanvas = tk.Canvas(
-            scrollWrap, bg=self.colors["main_bg"], highlightthickness=0, width=130
+            scrollWrap, bg="white", highlightthickness=0, width=130
         )
-        vsb = ttk.Scrollbar(scrollWrap, orient="vertical", command=self.floorCanvas.yview)
-        self.floorCanvas.configure(yscrollcommand=vsb.set)
 
-        vsb.pack(side=tk.RIGHT, fill=tk.Y)
-        self.floorCanvas.pack(side=tk.LEFT, fill=tk.Y, expand=True)
+        # Create scrollbar but don't pack it yet
+        self.floor_vsb = ttk.Scrollbar(scrollWrap, orient="vertical", command=self.floorCanvas.yview)
+        self.floorCanvas.configure(yscrollcommand=self._on_floor_scroll)
 
-        self.floorFrame = tk.Frame(self.floorCanvas, bg=self.colors["main_bg"])
+        # Pack the canvas first
+        self.floorCanvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Create the floor frame
+        self.floorFrame = tk.Frame(self.floorCanvas, bg="white")
         self.floorCanvas.create_window((0, 0), window=self.floorFrame, anchor="nw")
 
-        self.floorFrame.bind(
-            "<Configure>",
-            lambda e: self.floorCanvas.configure(scrollregion=self.floorCanvas.bbox("all"))
-        )
-
+        # Restore the mousewheel bindings for scrolling
         def _on_mousewheel(event):
             self.floorCanvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
         # Windows / Linux
-        self.floorCanvas.bind_all("<MouseWheel>",   _on_mousewheel)
+        self.floorCanvas.bind_all("<MouseWheel>", _on_mousewheel)
         # macOS
         self.floorCanvas.bind_all("<Button-4>", _on_mousewheel)
         self.floorCanvas.bind_all("<Button-5>", _on_mousewheel)
 
+        # Bottom border for right panel
+        tk.Frame(rightContainer, height=1, bg="#cccccc").pack(side=tk.BOTTOM, fill=tk.X)
+
     def _create_compass_layer(self, parent_frame):
         self.compass_canvas = tk.Canvas(parent_frame, width=80, height=120,
-                                        bg='white', highlightthickness=0)
+                                        bg="white", highlightthickness=0)
 
-        self.compass_canvas.place(x=0, y=0)
+        self.compass_canvas.place(x=1, y=1)  # Added 1px margin from the border
 
         center_x = 40
         center_y = 40
-        radius = 25
+        radius = 20
 
         self.compass_canvas.create_oval(
             center_x - radius, center_y - radius,
@@ -196,26 +285,26 @@ class GraphicalView(tk.Tk):
             outline='black', width=2
         )
         self.compass_canvas.create_line(
-            center_x, center_y - radius, center_x, center_y + radius, width=2
+            center_x, center_y - radius, center_x, center_y + radius, width=2, fill='black'
         )
         self.compass_canvas.create_line(
-            center_x - radius, center_y, center_x + radius, center_y, width=2
+            center_x - radius, center_y, center_x + radius, center_y, width=2, fill='black'
         )
         self.compass_canvas.create_text(
             center_x, center_y - radius - 10,
-            text='N', font=('Helvetica', 8, 'bold')
+            text='N', font=('Helvetica', 8, 'bold'), fill='black'
         )
         self.compass_canvas.create_text(
             center_x + radius + 10, center_y,
-            text='E', font=('Helvetica', 8, 'bold')
+            text='E', font=('Helvetica', 8, 'bold'), fill='black'
         )
         self.compass_canvas.create_text(
             center_x, center_y + radius + 10,
-            text='S', font=('Helvetica', 8, 'bold')
+            text='S', font=('Helvetica', 8, 'bold'), fill='black'
         )
         self.compass_canvas.create_text(
             center_x - radius - 10, center_y,
-            text='O', font=('Helvetica', 8, 'bold')
+            text='O', font=('Helvetica', 8, 'bold'), fill='black'
         )
 
         line_y = center_y + radius + 25
@@ -223,26 +312,24 @@ class GraphicalView(tk.Tk):
         start_x = center_x - (line_length_px // 2)
         end_x   = center_x + (line_length_px // 2)
 
-        self.compass_canvas.create_line(
-            start_x, line_y, end_x, line_y,
-            width=2, fill='black'
-        )
-
         self.compass_canvas.create_text(
-            center_x, line_y - 8,
+            center_x, line_y,
             text="2m", font=("Helvetica", 9, "bold"),
             fill='black'
         )
 
+        self.compass_canvas.create_line(
+            start_x, line_y + 10, end_x, line_y + 10, width=2, fill="black"
+        )
     def _create_bottom_toolbar(self):
         toolbarFrame = tk.Frame(self, bg=self.colors["toolbar_bg"])
-        toolbarFrame.pack(side=tk.BOTTOM, fill=tk.X)
+        toolbarFrame.pack(side=tk.BOTTOM, fill=tk.X)  # Increased bottom margin to 20px
 
         leftSpace = tk.Label(toolbarFrame, bg=self.colors["toolbar_bg"])
         leftSpace.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         iconFrame = tk.Frame(toolbarFrame, bg=self.colors["toolbar_bg"])
-        iconFrame.pack(side=tk.LEFT)
+        iconFrame.pack(side=tk.LEFT, pady=10)  # Add vertical padding to the icon frame
 
         # Tool names in French (direct constant strings for better reliability)
         tool_buttons = [
@@ -256,18 +343,48 @@ class GraphicalView(tk.Tk):
 
         # Create buttons with tooltips
         for tool_id, tooltip_text in tool_buttons:
-            # Create the button
-            btn = ttk.Button(
-                iconFrame,
-                image=self.icons.get(tool_id),
-                command=lambda tool=tool_id: self.on_tool_button_click(tool)
+            # Create button container with fixed size of 45x45
+            btn_container = tk.Frame(iconFrame, bg=self.colors["toolbar_bg"], width=50, height=50)
+            btn_container.pack(side=tk.LEFT, padx=4, pady=(15, 30)) 
+            btn_container.pack_propagate(False)  # Prevent resizing based on content
+
+            # Create rounded button using Canvas
+            canvas = tk.Canvas(
+                btn_container,
+                width=50,
+                height=50,
+                bg=self.colors["toolbar_bg"],
+                highlightthickness=0,
+                bd=0
             )
-            btn.pack(side=tk.LEFT, padx=10, pady=5)
-            
+            canvas.pack(fill=tk.BOTH, expand=True)
+
+            # Draw rounded rectangle (simulating rounded corners)
+            radius = 10  # 15px radius as requested
+            canvas.create_oval(0, 0, 2*radius, 2*radius, fill=self.colors["button_bg"], outline="")
+            canvas.create_oval(45-2*radius, 0, 45, 2*radius, fill=self.colors["button_bg"], outline="")
+            canvas.create_oval(0, 45-2*radius, 2*radius, 45, fill=self.colors["button_bg"], outline="")
+            canvas.create_oval(45-2*radius, 45-2*radius, 45, 45, fill=self.colors["button_bg"], outline="")
+
+            # Draw rectangles to complete the rounded shape
+            canvas.create_rectangle(radius, 0, 45-radius, 45, fill=self.colors["button_bg"], outline="")
+            canvas.create_rectangle(0, radius, 45, 45-radius, fill=self.colors["button_bg"], outline="")
+
+            # Create icon on the canvas
+            icon = self.icons.get(tool_id)
+            if icon:
+                icon_id = canvas.create_image(45//2, 45//2, image=icon)
+
+            # Bind click events
+            canvas.bind("<Button-1>", lambda event, tool=tool_id: self.on_tool_button_click(tool))
+
+            # Store button reference - we now store the canvas instead of a label
+            self.tool_buttons[tool_id] = canvas
+
             # Create tooltip - explicit instance creation
             tooltip = Tooltip(self)
-            tooltip._attach_to_widget(btn, tooltip_text)
-            
+            tooltip._attach_to_widget(canvas, tooltip_text)
+
             # Store tooltip reference to prevent garbage collection
             self.tooltips.append(tooltip)
 
@@ -282,21 +399,21 @@ class GraphicalView(tk.Tk):
                 "y": event.y,
                 "is_click":True
             })
-        
+
         if self.current_tool == "window":
             ivy_bus.publish("draw_window_request",{
                 "x": event.x,
                 "y": event.y,
                 "is_click":True
             })
-        
+
         if self.current_tool == "door":
             ivy_bus.publish("draw_door_request",{
                 "x": event.x,
                 "y": event.y,
                 "is_click":True
             })
-        
+
         if self.current_tool == "vent":
             if not self.vent_role:
                 self.on_show_alert_request({
@@ -335,7 +452,7 @@ class GraphicalView(tk.Tk):
                 "y": event.y,
                 "is_preview": True
             })
-        
+
         if self.current_tool == "window":
             ivy_bus.publish("draw_window_request",{
                 "x": event.x,
@@ -348,7 +465,7 @@ class GraphicalView(tk.Tk):
                 "y": event.y,
                 "is_preview": True
             })
-        
+
         if self.current_tool == "vent" and self.vent_role:
             ivy_bus.publish("draw_vent_request", {
                 "x": event.x, "y": event.y,
@@ -356,36 +473,55 @@ class GraphicalView(tk.Tk):
                 "role":  self.vent_role,
                 "color": self.vent_color
             })
-        
+
         self._handle_hover(event)
 
     # the case to cancel the wall when draw
     def on_canvas_right_click(self,event):
         if self.current_tool == "wall":
             ivy_bus.publish("cancal_to_draw_wall_request",{})
-            
+
         if self.current_tool == "window":
             ivy_bus.publish("cancal_to_draw_window_request",{})
-        
+
         if self.current_tool == "door":
             ivy_bus.publish("cancal_to_draw_door_request",{})
-        
+
         if self.current_tool == "vent":
             ivy_bus.publish("cancal_to_draw_vent_request", {})
 
     def on_new_floor_button_click(self):
         ivy_bus.publish("new_floor_request", {})
 
-    def on_tool_button_click(self, tool):
-        self.current_tool = tool  # Update local tool state immediately
-        self._update_cursor()     # Update cursor immediately for responsiveness
-        
+    def on_tool_button_click(self, tool, event=None):
+        # Reset previous tool button appearance
+        if self.current_tool and self.current_tool in self.tool_buttons:
+            canvas = self.tool_buttons[self.current_tool]
+            # Update all shapes on the canvas to use the default background color
+            for item in canvas.find_all():
+                if canvas.type(item) in ("rectangle", "oval"):
+                    canvas.itemconfig(item, fill=self.colors["button_bg"])
+
+        # Update local tool state
+        self.current_tool = tool
+
+        # Highlight selected tool button
+        if tool in self.tool_buttons:
+            canvas = self.tool_buttons[tool]
+            # Update all shapes on the canvas to use the selected color
+            for item in canvas.find_all():
+                if canvas.type(item) in ("rectangle", "oval"):
+                    canvas.itemconfig(item, fill=self.colors["selected_tool"])
+
+        # Update cursor
+        self._update_cursor()
+
+        # Handle vent tool specially
         if tool == "vent":
             ivy_bus.publish("tool_selected_request", {"tool": tool})
             self.show_vent_type_menu()
         else:
             ivy_bus.publish("tool_selected_request", {"tool": tool})
-
 
     def on_floor_button_click(self, floor_index):
         ivy_bus.publish("floor_selected_request", {
@@ -404,16 +540,16 @@ class GraphicalView(tk.Tk):
             label="Définir la hauteur",
             command=lambda: self.on_set_height(floor_index)
         )
-        
+
         menu.add_separator()
-        
+
         menu.add_command(
             label="Supprimer",
             command=lambda: self.on_delete_floor(floor_index)
         )
 
         menu.tk_popup(event.x_root,event.y_root)
-        
+
     def on_rename_floor(self,floor_index):
         new_name=simpledialog.askstring(
             title="Renommer l'étage",
@@ -425,7 +561,7 @@ class GraphicalView(tk.Tk):
                 "floor_index":floor_index,
                 "new_name": new_name 
             })
-    
+
     def show_vent_type_menu(self):
         menu = tk.Menu(self, tearoff=0)
 
@@ -466,7 +602,7 @@ class GraphicalView(tk.Tk):
                 start[0], start[1], end[0], end[1],
                 fill="gray", dash=(4, 2) ,width=5               
             )
-        
+
         else:
             if hasattr(self, "temp_line"):
                 self.canvas.delete(self.temp_line)
@@ -477,8 +613,8 @@ class GraphicalView(tk.Tk):
                 fill=fill ,width=6,tags=("wall",)
             )
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        
-        #self.canvas.create_line(start[0], start[1], end[0], end[1], fill=fill)
+
+        # self.canvas.create_line(start[0], start[1], end[0], end[1], fill=fill)
 
     def on_draw_window_update(self,data):
         start = data.get("start")
@@ -493,7 +629,7 @@ class GraphicalView(tk.Tk):
                 start[0], start[1], end[0], end[1],
                 fill="gray", dash=(4, 2), width=thickness               
             )
-        
+
         else:
             if hasattr(self, "temp_line"):
                 self.canvas.delete(self.temp_line)
@@ -504,13 +640,13 @@ class GraphicalView(tk.Tk):
                 fill=fill ,width=thickness, tags=("window",)
             )
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-    
+
     def on_draw_door_update(self,data):
         start = data.get("start")
         end   = data.get("end")
         fill  = data.get("fill")
         thickness = data.get("thickness")
-        
+
         if fill == "gray":
             if hasattr(self,"temp_line"):
                 self.canvas.delete(self.temp_line)
@@ -518,7 +654,7 @@ class GraphicalView(tk.Tk):
                 start[0], start[1], end[0], end[1],
                 fill="gray", dash=(4, 2), width=thickness
             )
-        
+
         else:
             if hasattr(self, "temp_line"):
                 self.canvas.delete(self.temp_line)
@@ -550,15 +686,15 @@ class GraphicalView(tk.Tk):
                 fill=color, width=4, tags=("vent",)
             )
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-            
+
             # Create well-formatted tooltip content with explicit strings
             name = data.get('name', '')
             diameter = data.get('diameter', '')
             flow = data.get('flow', '')
             role = data.get('role', '')
-            
+
             meta = f"{name}\nØ {diameter} mm\n{flow} m³/h\n{role}"
-            
+
             # Ensure meta data is not empty
             if meta and meta.strip():
                 # Store both formatted text and individual components
@@ -590,7 +726,7 @@ class GraphicalView(tk.Tk):
             if diameter is None:  # User cancelled
                 ivy_bus.publish("cancal_to_draw_vent_request", {})
                 return
-                
+
             # Check if input is a valid integer
             if not diameter.strip():
                 self.on_show_alert_request({
@@ -598,14 +734,14 @@ class GraphicalView(tk.Tk):
                     "message": "Le diamètre ne peut pas être vide."
                 })
                 continue
-                
+
             if not diameter.isdigit():
                 self.on_show_alert_request({
                     "title": "Entrée invalide",
                     "message": "Le diamètre doit être un nombre entier positif."
                 })
                 continue
-                
+
             # Valid integer, break out of the loop
             break
 
@@ -615,7 +751,7 @@ class GraphicalView(tk.Tk):
             if flow is None:  # User cancelled
                 ivy_bus.publish("cancal_to_draw_vent_request", {})
                 return
-                
+
             # Check if input is a valid integer
             if not flow.strip():
                 self.on_show_alert_request({
@@ -623,14 +759,14 @@ class GraphicalView(tk.Tk):
                     "message": "Le débit d'air ne peut pas être vide."
                 })
                 continue
-                
+
             if not flow.isdigit():
                 self.on_show_alert_request({
                     "title": "Entrée invalide",
                     "message": "Le débit d'air doit être un nombre entier positif."
                 })
                 continue
-                
+
             # Valid integer, break out of the loop
             break
 
@@ -647,8 +783,31 @@ class GraphicalView(tk.Tk):
         "floor_name": "Floor 2"
         }
         """
-        floor_name  = data.get("floor_name")
+        floor_name = data.get("floor_name")
+        selected_index = data.get("selected_floor_index")
+
+        # Update the label text
         self.currentFloorLabel.config(text=f"Étage sélectionné : {floor_name}")
+
+        # Update the styling of floor buttons
+        for i, btn_frame in enumerate(self.floor_buttons):
+            # Find the canvas in the button frame
+            canvas = None
+            for widget in btn_frame.winfo_children():
+                if isinstance(widget, tk.Canvas):
+                    canvas = widget
+                    break
+
+            if canvas and hasattr(canvas, 'shape_id') and hasattr(canvas, 'text_id'):
+                # Update button appearance based on selection state
+                is_selected = (i == selected_index)
+                bg_color = self.colors["selected_floor"] if is_selected else "white"
+
+                # Update shape color
+                canvas.itemconfig(canvas.shape_id, fill=bg_color, outline=bg_color)
+
+                # Update text weight
+                canvas.itemconfig(canvas.text_id, font=("Helvetica", 11, "bold" if is_selected else "normal"))
 
     def on_new_floor_update(self, data):
         """
@@ -660,40 +819,127 @@ class GraphicalView(tk.Tk):
         floors = data.get("floors", [])
         selected_index = data.get("selected_floor_index", None)
 
+        # Clear existing buttons
         for btn in self.floor_buttons:
-            btn.pack_forget()
+            for widget in btn.winfo_children():
+                widget.destroy()
+            btn.destroy()
 
-        new_buttons = []
+        self.floor_buttons = []
+
+        # Create new buttons with the custom style
         for i, floor_name in enumerate(floors):
-            if i < len(self.floor_buttons):
-                btn = self.floor_buttons[i]
-                btn.config(text=floor_name)
-            else:
-                btn = ttk.Button(
-                    self.floorFrame,
-                    text=floor_name,
-                    command=lambda idx=i: self.on_floor_button_click(idx)
-                )
-                # to rename the floor
-                btn.bind("<Button-3>",lambda e, idx=i:self.on_floor_button_right_click(e,idx))
-            new_buttons.append(btn)
+            # Create a frame for each button with white background
+            btn_frame = tk.Frame(self.floorFrame, bg="white")
+            btn_frame.pack(side=tk.TOP, fill=tk.X, pady=3, padx=0)
 
-        self.floor_buttons = new_buttons
+            # Create button with rounded corners using a canvas
+            button_height = 40
 
-        for btn in reversed(self.floor_buttons):
-            btn.pack(pady=5)
+            # Calculate available width - use full width
+            available_width = 200 - 20  # Container width minus padding (10px on each side)
+
+            canvas = tk.Canvas(
+                btn_frame, 
+                height=button_height,
+                width=available_width,
+                bg="white",
+                highlightthickness=0
+            )
+            canvas.pack(fill=tk.X)
+
+            # Determine if this is the selected button
+            is_selected = (i == selected_index)
+            button_bg = self.colors["selected_floor"] if is_selected else "white"
+
+            # Draw a proper rounded rectangle - using a better approach
+            # Create the button background - rounded on left side only
+            radius = 20  # Slightly smaller radius for better appearance
+
+            # Define the box with some padding
+            x1 = 5
+            y1 = 5
+            x2 = available_width - 5
+            y2 = button_height - 5
+
+            # Draw the main shape as a polygon with rounded corners
+            points = [
+                # Top side
+                x1 + radius, y1,
+                x2, y1,
+                # Right side
+                x2, y2,
+                # Bottom side
+                x1 + radius, y2,
+                # Bottom-left corner (arc approximation)
+                x1, y2,
+                # Left side
+                x1, y1 + radius,
+                # Top-left corner (arc approximation)
+                x1 + radius, y1
+            ]
+
+            # Create the main shape
+            shape_id = canvas.create_polygon(points, fill=button_bg, outline=button_bg, smooth=True)
+
+            # Add text, left-aligned with padding
+            text_padding = 20
+            text_id = canvas.create_text(
+                text_padding,
+                button_height / 2,
+                text=floor_name, 
+                anchor="w",  # Left-aligned
+                fill=self.colors["floor_text"],
+                font=("Helvetica", 11, "bold" if is_selected else "normal")
+            )
+
+            # Store IDs for later updates
+            canvas.tag_lower(shape_id)  # Ensure shape is behind text
+            canvas.tag_raise(text_id)   # Ensure text is on top
+
+            # Save references to the shape and text for easy updates
+            canvas.shape_id = shape_id
+            canvas.text_id = text_id
+
+            # Bind click events
+            canvas.bind("<Button-1>", lambda e, idx=i: self.on_floor_button_click(idx))
+            canvas.bind("<Button-3>", lambda e, idx=i: self.on_floor_button_right_click(e, idx))
+
+            self.floor_buttons.append(btn_frame)
 
         if selected_index is not None and 0 <= selected_index < len(floors):
             self.currentFloorLabel.config(text=f"Étage sélectionné : {floors[selected_index]}")
         else:
             self.currentFloorLabel.config(text="Aucun étage sélectionné")
 
+        # Check if scrollbar is needed after updating floor buttons
+        self.after(10, self._update_floor_scroll)
+
     def on_tool_selected_update(self, data):
         """
         When the Controller publishes 'tool_selected_update', it can update the interface status
         (such as highlighting the current tool button, or displaying "Current Tool" in the status bar)
         """
+        # Reset previous tool button appearance
+        if self.current_tool and self.current_tool in self.tool_buttons:
+            canvas = self.tool_buttons[self.current_tool]
+            # Update all shapes on the canvas to use the default background color
+            for item in canvas.find_all():
+                if canvas.type(item) in ("rectangle", "oval"):
+                    canvas.itemconfig(item, fill=self.colors["button_bg"])
+
+        # Update current tool
         self.current_tool = data.get("tool")
+
+        # Highlight selected tool button
+        if self.current_tool in self.tool_buttons:
+            canvas = self.tool_buttons[self.current_tool]
+            # Update all shapes on the canvas to use the selected color
+            for item in canvas.find_all():
+                if canvas.type(item) in ("rectangle", "oval"):
+                    canvas.itemconfig(item, fill=self.colors["selected_tool"])
+
+        # Update cursor
         self._update_cursor()
 
     def _update_cursor(self):
@@ -720,41 +966,41 @@ class GraphicalView(tk.Tk):
         self.canvas.configure(scrollregion=(0, 0, self.canvas.winfo_width(), self.canvas.winfo_height()))
         self.canvas.xview_moveto(0)
         self.canvas.yview_moveto(0)
-    
+
     def _schedule_hover(self, item, x_root, y_root):
         """Schedule showing a tooltip for an item after a delay"""
         if item == self.current_hover_item:
             return
-            
+
         self._cancel_hover()
         self.current_hover_item = item
-        
+
         if item in self.canvas_item_meta:
             # Create a dedicated tooltip for this vent if it doesn't exist
             if item not in self.vent_tooltips:
                 self.vent_tooltips[item] = Tooltip(self)
-            
+
             # Get tooltip data
             meta_data = self.canvas_item_meta[item]
             tooltip_text = meta_data['text'] if isinstance(meta_data, dict) else meta_data
-            
+
             # Schedule showing this vent's tooltip
             if tooltip_text and tooltip_text.strip():
                 self.hover_after_id = self.after(
                     1000,
                     lambda: self.vent_tooltips[item].show(tooltip_text, x_root, y_root)
                 )
-    
+
     def _cancel_hover(self):
         """Cancel any pending hover tooltip"""
         if self.hover_after_id is not None:
             self.after_cancel(self.hover_after_id)
             self.hover_after_id = None
-            
+
         # Hide all tooltips
         for tooltip in self.vent_tooltips.values():
             tooltip.hide()
-            
+
         self.tooltip.hide()
         self.current_hover_item = None
 
@@ -763,13 +1009,13 @@ class GraphicalView(tk.Tk):
         # Only process hover events if we have canvas items
         if not hasattr(self, "canvas") or not self.canvas:
             return
-            
+
         # Find items under the cursor
         try:
             items = self.canvas.find_overlapping(event.x, event.y, event.x, event.y)
             # Find the first item that has metadata (for tooltip)
             vent_item = next((i for i in items if i in self.canvas_item_meta), None)
-            
+
             if vent_item:
                 self._schedule_hover(vent_item, event.x_root + 10, event.y_root + 10)
             else:
@@ -781,7 +1027,7 @@ class GraphicalView(tk.Tk):
 
     def on_canvas_leave(self, event):
         self._cancel_hover()
-    
+
     def on_set_height(self, floor_index):
         value = simpledialog.askstring(
             "Hauteur de cet étage",
@@ -808,7 +1054,7 @@ class GraphicalView(tk.Tk):
     def _on_window_configure(self, event):
         if event.widget is self:
             self._redraw_height_text()
-    
+
     def _redraw_height_text(self):
         if self.current_floor_height is None:
             return
@@ -833,8 +1079,39 @@ class GraphicalView(tk.Tk):
             f"Êtes-vous sûr de vouloir supprimer cet étage ?\nTous les éléments de cet étage seront perdus.",
             icon='warning'
         )
-        
         if result:
             ivy_bus.publish("delete_floor_request", {
                 "floor_index": floor_index
             })
+
+    def _update_floor_scroll(self):
+        """Update floor canvas scrollregion and determine if scrollbar is needed"""
+        self.floorCanvas.configure(scrollregion=self.floorCanvas.bbox("all"))
+
+        # Check if content exceeds the visible area
+        content_height = self.floorFrame.winfo_reqheight()
+        canvas_height = self.floorCanvas.winfo_height()
+
+        if content_height > canvas_height:
+            # Content is larger than canvas, show scrollbar
+            self.floor_vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        else:
+            # Content fits, hide scrollbar
+            self.floor_vsb.pack_forget()
+
+    def _on_floor_scroll(self, *args):
+        """Custom scrollcommand for floor canvas that updates scrollbar and checks visibility"""
+        self.floor_vsb.set(*args)
+
+        # After updating scrollbar position, check if it should be visible
+        content_height = self.floorFrame.winfo_reqheight()
+        canvas_height = self.floorCanvas.winfo_height()
+
+        if content_height > canvas_height:
+            # Content is larger than canvas, ensure scrollbar is shown
+            if not self.floor_vsb.winfo_ismapped():
+                self.floor_vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        else:
+            # Content fits, ensure scrollbar is hidden
+            if self.floor_vsb.winfo_ismapped():
+                self.floor_vsb.pack_forget()
