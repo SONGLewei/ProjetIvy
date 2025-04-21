@@ -94,18 +94,18 @@
         "vents": [
             {
                 "start": [
-                    653.0,
-                    208.0
+                    776.0,
+                    470.0
                 ],
                 "end": [
-                    653.0,
-                    366.0
+                    776.0,
+                    302.0
                 ],
-                "name": "12",
-                "diameter": "2",
-                "flow_rate": "2",
-                "function": "extraction_externe",
-                "color": "#4c7093"
+                "name": "1234",
+                "diameter": "234",
+                "flow_rate": "234",
+                "function": "extraction_interne",
+                "color": "#ff0000"
             }
         ]
     },

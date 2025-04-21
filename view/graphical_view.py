@@ -1478,12 +1478,25 @@ class GraphicalView(tk.Tk):
 
     def on_document_button_click(self):
         """Open a window displaying the ventilation summary view"""
+        # Check if there's already a window open - if so, focus on it instead of creating a new one
+        if hasattr(self, 'ventilation_summary_window') and self.ventilation_summary_window is not None:
+            try:
+                if self.ventilation_summary_window.winfo_exists():
+                    self.ventilation_summary_window.focus_force()
+                    return
+            except Exception:
+                # In case of error, continue to create a new window
+                pass
+        
         # Create the Toplevel window
         summary_window = tk.Toplevel(self)
         summary_window.title("Vue Textuelle - Bilan Aéraulique")
         
+        # Store reference to the window for future access
+        self.ventilation_summary_window = summary_window
+        
         # Set window size and position
-        window_width = 800
+        window_width = 915
         window_height = 600
         summary_window.geometry(f"{window_width}x{window_height}")
         
@@ -1665,12 +1678,21 @@ class GraphicalView(tk.Tk):
 
     def _handle_summary_window_close(self, summary_window):
         """Handle cleanup when summary window is closed"""
-        # Now that we have an unsubscribe method, use it to clean up properly
-        if hasattr(summary_window, 'ventilation_update_handler'):
-            ivy_bus.unsubscribe("ventilation_summary_update", summary_window.ventilation_update_handler)
-        
-        # Destroy the window
-        summary_window.destroy()
+        try:
+            # Now that we have an unsubscribe method, use it to clean up properly
+            if hasattr(summary_window, 'ventilation_update_handler'):
+                ivy_bus.unsubscribe("ventilation_summary_update", summary_window.ventilation_update_handler)
+                # Remove the reference to prevent future calls to a non-existent window
+                if hasattr(self, 'ventilation_summary_window'):
+                    self.ventilation_summary_window = None
+            
+            # Destroy the window
+            summary_window.destroy()
+        except Exception as e:
+            print(f"[View] Error during summary window cleanup: {e}")
+            # Still try to reset the reference even if there was an error
+            if hasattr(self, 'ventilation_summary_window'):
+                self.ventilation_summary_window = None
 
     def populate_ventilation_summary(self, summary_window, data=None):
         """Populate the ventilation summary window with data from all floors"""
@@ -1682,10 +1704,25 @@ class GraphicalView(tk.Tk):
         all_vents_tree = widgets["all_vents_tree"]
         category_trees = widgets["category_trees"]
         
-        # Clear existing data
-        all_vents_tree.delete(*all_vents_tree.get_children())
-        for tree in category_trees.values():
-            tree.delete(*tree.get_children())
+        # Check if the window still exists by trying to access its state
+        try:
+            winfo_exists = summary_window.winfo_exists()
+            if not winfo_exists:
+                print("[View] Warning: Summary window no longer exists")
+                return
+        except Exception:
+            print("[View] Warning: Error checking if summary window exists")
+            return
+            
+        # Check if the treeview widgets still exist
+        try:
+            # Clear existing data
+            all_vents_tree.delete(*all_vents_tree.get_children())
+            for tree in category_trees.values():
+                tree.delete(*tree.get_children())
+        except Exception as e:
+            print(f"[View] Warning: Error accessing treeview widgets: {e}")
+            return
             
         # Variables to track statistics
         total_vents = 0
@@ -1739,49 +1776,57 @@ class GraphicalView(tk.Tk):
                 total_outflow += flow_rate
             
             # Add to all vents tree
-            vent_type = vent_types.get(vent_function, "")
-            all_vents_tree.insert("", tk.END, values=(
-                vent_data.get("floor_name", ""),
-                vent_data.get("name", ""),
-                vent_type,
-                vent_data.get("diameter", ""),
-                vent_data.get("flow_rate", "")
-            ))
-            
-            # Add to category tree
-            if vent_function in category_trees:
-                category_trees[vent_function].insert("", tk.END, values=(
+            try:
+                vent_type = vent_types.get(vent_function, "")
+                all_vents_tree.insert("", tk.END, values=(
                     vent_data.get("floor_name", ""),
                     vent_data.get("name", ""),
+                    vent_type,
                     vent_data.get("diameter", ""),
                     vent_data.get("flow_rate", "")
                 ))
+                
+                # Add to category tree
+                if vent_function in category_trees:
+                    category_trees[vent_function].insert("", tk.END, values=(
+                        vent_data.get("floor_name", ""),
+                        vent_data.get("name", ""),
+                        vent_data.get("diameter", ""),
+                        vent_data.get("flow_rate", "")
+                    ))
+            except Exception as e:
+                print(f"[View] Error adding vent to treeview: {e}")
+                continue
         
-        # Update statistics display
-        widgets["total_vents_value"].config(text=str(total_vents))
-        
-        for category, count in category_counts.items():
-            if category in widgets["category_labels"]:
-                widgets["category_labels"][category].config(text=str(count))
-        
-        widgets["total_inflow_value"].config(text=f"{total_inflow} m³/h")
-        widgets["total_outflow_value"].config(text=f"{total_outflow} m³/h")
-        
-        # Calculate balance
-        balance = total_inflow - total_outflow
-        balance_text = f"{abs(balance)} m³/h"
-        
-        if balance > 0:
-            balance_text = f"+{balance_text} (Surpression)"
-            widgets["balance_value"].config(text=balance_text, foreground="blue")
-        elif balance < 0:
-            balance_text = f"-{balance_text} (Dépression)" 
-            widgets["balance_value"].config(text=balance_text, foreground="red")
-        else:
-            balance_text = f"{balance_text} (Équilibré)"
-            widgets["balance_value"].config(text=balance_text, foreground="green")
+        # Update statistics display - with error handling
+        try:
+            widgets["total_vents_value"].config(text=str(total_vents))
             
-        print(f"[View] Summary populated with {total_vents} vents. Inflow: {total_inflow}, Outflow: {total_outflow}")
+            for category, count in category_counts.items():
+                if category in widgets["category_labels"]:
+                    widgets["category_labels"][category].config(text=str(count))
+            
+            widgets["total_inflow_value"].config(text=f"{total_inflow} m³/h")
+            widgets["total_outflow_value"].config(text=f"{total_outflow} m³/h")
+            
+            # Calculate balance
+            balance = total_inflow - total_outflow
+            balance_text = f"{abs(balance)} m³/h"
+            
+            if balance > 0:
+                balance_text = f"+{balance_text} (Surpression)"
+                widgets["balance_value"].config(text=balance_text, foreground="blue")
+            elif balance < 0:
+                balance_text = f"-{balance_text} (Dépression)" 
+                widgets["balance_value"].config(text=balance_text, foreground="red")
+            else:
+                balance_text = f"{balance_text} (Équilibré)"
+                widgets["balance_value"].config(text=balance_text, foreground="green")
+                
+            print(f"[View] Summary populated with {total_vents} vents. Inflow: {total_inflow}, Outflow: {total_outflow}")
+        except Exception as e:
+            print(f"[View] Error updating statistics widgets: {e}")
+            return
 
     def _truncate_text_with_ellipsis(self, text, max_width, font):
         """Truncates text with ellipsis if it exceeds max_width pixels"""
@@ -1970,5 +2015,16 @@ class GraphicalView(tk.Tk):
             ivy_bus.publish("cancal_to_draw_door_request", {})
         elif self.current_tool == 'vent':
             ivy_bus.publish("cancal_to_draw_vent_request", {})
+            
+            # If we have an open ventilation summary window, ensure it's properly tracked
+            if hasattr(self, 'ventilation_summary_window') and self.ventilation_summary_window is not None:
+                try:
+                    # Check if the window still exists
+                    if not self.ventilation_summary_window.winfo_exists():
+                        # Window no longer exists, clear the reference
+                        self.ventilation_summary_window = None
+                except Exception:
+                    # In case of error, clear the reference to be safe
+                    self.ventilation_summary_window = None
         
         # Removed alert message for a cleaner experience
