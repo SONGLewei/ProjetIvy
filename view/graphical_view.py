@@ -30,7 +30,7 @@ class GraphicalView(tk.Tk):
         if os.path.exists(png_path):
             try:
                 icon_img = PhotoImage(file=png_path)
-                self.iconphoto(True, icon_img)
+                self.iconphoto(False, icon_img)
             except tk.TclError:
                 print(f"Warning: Could not load icon as PhotoImage from {png_path}")
         else:
@@ -112,6 +112,18 @@ class GraphicalView(tk.Tk):
         # Highlight the select tool button initially and notify controller
         self.after(200, lambda: self._highlight_tool_button('select'))
         self.after(200, lambda: ivy_bus.publish("tool_selected_request", {"tool": 'select'}))
+        
+        # Make window appear in front of other applications - macOS specific approach
+        self.focus_force()  # Force focus on this window
+        self.after(100, self._bring_to_front)  # Delay to ensure window is fully created
+
+    def _bring_to_front(self):
+        """Ensures the window appears in front of other applications on macOS"""
+        self.lift()  # Raise window in stacking order
+        self.attributes('-topmost', True)  # Make window stay on top
+        self.focus_force()  # Force focus again after topmost
+        # After a short delay, turn off topmost to allow other windows to go in front when needed
+        self.after(100, lambda: self.attributes('-topmost', False))
 
     def _setup_style(self):
         style = ttk.Style(self)
@@ -820,6 +832,19 @@ class GraphicalView(tk.Tk):
                 start[0], start[1], end[0], end[1],
                 fill=fill ,width=thickness, tags=("window",)
             )
+
+            # Calculate window length in meters (using scale where 40px = 2m from _create_compass_layer)
+            dx = end[0] - start[0]
+            dy = end[1] - start[1]
+            length_px = (dx**2 + dy**2)**0.5
+            length_m = length_px * (2.0/40.0)  # Convert to meters based on scale
+
+            # Store length data for tooltip
+            self.canvas_item_meta[item] = {
+                'text': f"{length_m:.2f}m",
+                'type': 'window'
+            }
+
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
             # Ensure all onion skin items remain below
@@ -848,6 +873,19 @@ class GraphicalView(tk.Tk):
                 start[0], start[1], end[0], end[1],
                 fill=fill,width=thickness,tags=("door",)
             )
+
+            # Calculate door length in meters (using scale where 40px = 2m from _create_compass_layer)
+            dx = end[0] - start[0]
+            dy = end[1] - start[1]
+            length_px = (dx**2 + dy**2)**0.5
+            length_m = length_px * (2.0/40.0)  # Convert to meters based on scale
+
+            # Store length data for tooltip
+            self.canvas_item_meta[item] = {
+                'text': f"{length_m:.2f}m",
+                'type': 'door'
+            }
+
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
             # Ensure all onion skin items remain below
