@@ -14,7 +14,6 @@ class GraphicalView(tk.Tk):
         self.title("Application VMC")
 
         # Check if the icon file exists before setting it
-        # Try to set the window icon using both iconbitmap and iconphoto methods
         icon_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "photos", "icon.ico"
         )
@@ -22,9 +21,20 @@ class GraphicalView(tk.Tk):
             os.path.dirname(os.path.abspath(__file__)), "photos", "icon.png"
         )
         
-        # Try to apply both icon methods for better cross-platform support
+        # For Windows, we need to use both approaches - the .ico for the taskbar icon
         if os.path.exists(icon_path):
-            self.iconbitmap(icon_path)
+            try:
+                self.iconbitmap(icon_path)
+                # On Windows, also try setting the taskbar icon
+                if os.name == "nt":
+                    try:
+                        import ctypes
+                        myappid = f'company.myproduct.version'  # Arbitrary string
+                        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+                    except:
+                        print("Could not set Windows taskbar icon")
+            except tk.TclError:
+                print(f"Warning: Failed to set icon using iconbitmap for {icon_path}")
         else:
             print(f"Warning: Icon file not found at {icon_path}")
             
