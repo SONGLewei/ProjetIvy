@@ -44,6 +44,9 @@ class Controller:
 
         ivy_bus.subscribe("save_project_request", self.handle_save_project_request)
         ivy_bus.subscribe("import_project_request", self.handle_import_project_request)
+        
+        # Add a handler for ventilation summary requests
+        ivy_bus.subscribe("get_ventilation_summary_request", self.handle_get_ventilation_summary_request)
 
         self.wall_start_point = None
         self.is_canceled_wall_draw = False
@@ -371,6 +374,9 @@ class Controller:
                 "flow": vent_obj.flow_rate,
                 "role": vent_obj.function
             })
+            
+            # Send update for ventilation summary
+            self.handle_get_ventilation_summary_request({})
 
             # If this is the floor below the current selected floor,
             # update the onion skin in the floor above
@@ -539,7 +545,17 @@ class Controller:
             return
 
         obj_type = data["type"]
-        x1, y1, x2, y2 = map(int, data["coords"])
+        coords = data["coords"]
+        
+        # For vents, the coordinates might have more values due to arrow shape
+        # Just extract the start and end points we need for comparison
+        if obj_type == "vent" and len(coords) > 4:
+            # For vents with complex shapes, take just the first 4 coordinates
+            x1, y1, x2, y2 = coords[0], coords[1], coords[2], coords[3]
+        else:
+            # For regular items like walls, windows, and doors
+            x1, y1, x2, y2 = map(int, coords)
+            
         start = (x1, y1)
         end   = (x2, y2)
 
@@ -555,7 +571,10 @@ class Controller:
         elif obj_type == "door":
             floor.doors   = [d for d in floor.doors   if not same_segment(d)]
         elif obj_type == "vent":
+            # Delete the vent
             floor.vents   = [v for v in floor.vents   if not same_segment(v)]
+            # Send update for ventilation summary if a vent was deleted
+            self.handle_get_ventilation_summary_request({})
 
         # If we are on a floor above 0, we need to refresh the onion skin
         # in case the floor below was modified
@@ -753,11 +772,26 @@ class Controller:
             # vents
             for v in f_dict.get("vents", []):
                 flow_rate = v.get("flow_rate", "") or v.get("flow", "")  # Try both keys for compatibility
+                function = v.get("function", "") or v.get("role", "extraction_interne")  # Default to extraction_interne if missing
+                
+                # Determine color based on function if not provided
+                color = v.get("color", "")
+                if not color:
+                    if function == "extraction_interne":
+                        color = "#ff0000"  # Red
+                    elif function == "insufflation_interne":
+                        color = "#ff9900"  # Orange
+                    elif function == "extraction_externe":
+                        color = "#4c7093"  # Dark blue
+                    elif function == "admission_externe":
+                        color = "#66ccff"  # Light blue
+                    else:
+                        color = "#000000"  # Black fallback
+                        
                 floor_obj.add_vent(
                     Vent(tuple(v["start"]), tuple(v["end"]),
                         v.get("name", ""), v.get("diameter", ""),
-                        flow_rate, v.get("function", ""),
-                        v.get("color", "#000"))
+                        flow_rate, function, color)
                 )
 
             new_floors.append(floor_obj)
@@ -780,6 +814,34 @@ class Controller:
         })
 
         self.handle_floor_selected_request({"floor_index": 0})
+        
+        # Send ventilation summary data after importing
+        self.handle_get_ventilation_summary_request({})
 
         # Success alert removed for a cleaner experience
         print(f"[Controller] Project imported successfully from: {json_path}")
+
+    def handle_get_ventilation_summary_request(self, data):
+        """Handle request for ventilation summary data from all floors"""
+        all_vents_data = []
+        
+        # Collect vents from all floors
+        for floor_idx, floor in enumerate(self.floors):
+            for vent in floor.vents:
+                all_vents_data.append({
+                    "floor_name": floor.name,
+                    "floor_index": floor_idx,
+                    "name": vent.name,
+                    "diameter": vent.diameter,
+                    "flow_rate": vent.flow_rate,
+                    "function": vent.function,
+                    "color": vent.color
+                })
+        
+        # Debug output to verify data
+        print(f"[Controller] Sending ventilation summary with {len(all_vents_data)} vents")
+        
+        # Send the combined data to the view
+        ivy_bus.publish("ventilation_summary_update", {
+            "vents": all_vents_data
+        })

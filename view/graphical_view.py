@@ -1042,6 +1042,9 @@ class GraphicalView(tk.Tk):
         """
         floor_name = data.get("floor_name")
         selected_index = data.get("selected_floor_index")
+        
+        # Update the current floor index
+        self.current_floor = selected_index
 
         # Update the label text
         self.currentFloorLabel.config(text=f"Etage selectionne : {floor_name}")
@@ -1472,6 +1475,313 @@ class GraphicalView(tk.Tk):
         ivy_bus.publish("import_project_request", {
             "json_path": file_path
         })
+
+    def on_document_button_click(self):
+        """Open a window displaying the ventilation summary view"""
+        # Create the Toplevel window
+        summary_window = tk.Toplevel(self)
+        summary_window.title("Vue Textuelle - Bilan Aéraulique")
+        
+        # Set window size and position
+        window_width = 800
+        window_height = 600
+        summary_window.geometry(f"{window_width}x{window_height}")
+        
+        # Center the window relative to the main window
+        x = self.winfo_x() + (self.winfo_width() - window_width) // 2
+        y = self.winfo_y() + (self.winfo_height() - window_height) // 2
+        summary_window.geometry(f"+{x}+{y}")
+        
+        # Make window modal
+        summary_window.transient(self)
+        summary_window.grab_set()
+        
+        # Create main frame with padding
+        main_frame = ttk.Frame(summary_window, padding=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title label
+        title_label = ttk.Label(main_frame, text="Bilan Aéraulique des Bouches de Ventilation", 
+                               font=("Helvetica", 16, "bold"))
+        title_label.pack(pady=(0, 20))
+        
+        # Create notebook with tabs
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill=tk.BOTH, expand=True)
+        
+        # All vents tab
+        all_vents_frame = ttk.Frame(notebook, padding=10)
+        notebook.add(all_vents_frame, text="Toutes les bouches")
+        
+        # Create TreeView for all vents
+        all_columns = ("floor", "name", "type", "diameter", "flow")
+        all_vents_tree = ttk.Treeview(all_vents_frame, columns=all_columns, show="headings", height=15)
+        
+        # Define headings
+        all_vents_tree.heading("floor", text="Étage")
+        all_vents_tree.heading("name", text="Nom")
+        all_vents_tree.heading("type", text="Type")
+        all_vents_tree.heading("diameter", text="Diamètre (mm)")
+        all_vents_tree.heading("flow", text="Débit (m³/h)")
+        
+        # Define column widths
+        all_vents_tree.column("floor", width=120)
+        all_vents_tree.column("name", width=120)
+        all_vents_tree.column("type", width=200)
+        all_vents_tree.column("diameter", width=120)
+        all_vents_tree.column("flow", width=120)
+        
+        # Add scrollbar
+        all_vents_scrollbar = ttk.Scrollbar(all_vents_frame, orient=tk.VERTICAL, command=all_vents_tree.yview)
+        all_vents_tree.configure(yscrollcommand=all_vents_scrollbar.set)
+        
+        all_vents_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        all_vents_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Category tabs - one for each type of vent
+        categories = {
+            "extraction_interne": {"name": "Extraction d'air vicié", "color": "#ff0000"},
+            "insufflation_interne": {"name": "Insufflation d'air neuf", "color": "#ff9900"},
+            "extraction_externe": {"name": "Extraction à l'extérieur", "color": "#4c7093"},
+            "admission_externe": {"name": "Admission d'air neuf extérieur", "color": "#66ccff"}
+        }
+        
+        category_frames = {}
+        category_trees = {}
+        
+        for category_id, category_info in categories.items():
+            # Create frame for this category
+            category_frame = ttk.Frame(notebook, padding=10)
+            notebook.add(category_frame, text=category_info["name"])
+            category_frames[category_id] = category_frame
+            
+            # Create TreeView for this category
+            cat_columns = ("floor", "name", "diameter", "flow")
+            cat_tree = ttk.Treeview(category_frame, columns=cat_columns, show="headings", height=15)
+            
+            # Define headings
+            cat_tree.heading("floor", text="Étage")
+            cat_tree.heading("name", text="Nom")
+            cat_tree.heading("diameter", text="Diamètre (mm)")
+            cat_tree.heading("flow", text="Débit (m³/h)")
+            
+            # Define column widths
+            cat_tree.column("floor", width=120)
+            cat_tree.column("name", width=120)
+            cat_tree.column("diameter", width=120)
+            cat_tree.column("flow", width=120)
+            
+            # Add scrollbar
+            cat_scrollbar = ttk.Scrollbar(category_frame, orient=tk.VERTICAL, command=cat_tree.yview)
+            cat_tree.configure(yscrollcommand=cat_scrollbar.set)
+            
+            cat_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            cat_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            # Store tree reference
+            category_trees[category_id] = cat_tree
+        
+        # Summary tab
+        summary_frame = ttk.Frame(notebook, padding=10)
+        notebook.add(summary_frame, text="Récapitulatif")
+        
+        # Create a frame for summary statistics
+        stats_frame = ttk.Frame(summary_frame, padding=10)
+        stats_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Summary labels
+        ttk.Label(stats_frame, text="Nombre total de bouches:", 
+                font=("Helvetica", 12)).grid(row=0, column=0, sticky="w", pady=5)
+        
+        total_vents_value = ttk.Label(stats_frame, text="0", font=("Helvetica", 12, "bold"))
+        total_vents_value.grid(row=0, column=1, sticky="w", pady=5)
+        
+        # Category counts
+        row = 1
+        category_labels = {}
+        for category_id, category_info in categories.items():
+            ttk.Label(stats_frame, text=f"Nombre de {category_info['name']}:", 
+                    font=("Helvetica", 12)).grid(row=row, column=0, sticky="w", pady=5)
+            
+            count_label = ttk.Label(stats_frame, text="0", font=("Helvetica", 12, "bold"))
+            count_label.grid(row=row, column=1, sticky="w", pady=5)
+            category_labels[category_id] = count_label
+            row += 1
+        
+        # Flow rates
+        ttk.Label(stats_frame, text="Débit total insufflé:", 
+                font=("Helvetica", 12)).grid(row=row, column=0, sticky="w", pady=5)
+        total_inflow_value = ttk.Label(stats_frame, text="0 m³/h", font=("Helvetica", 12, "bold"))
+        total_inflow_value.grid(row=row, column=1, sticky="w", pady=5)
+        row += 1
+        
+        ttk.Label(stats_frame, text="Débit total extrait:", 
+                font=("Helvetica", 12)).grid(row=row, column=0, sticky="w", pady=5)
+        total_outflow_value = ttk.Label(stats_frame, text="0 m³/h", font=("Helvetica", 12, "bold"))
+        total_outflow_value.grid(row=row, column=1, sticky="w", pady=5)
+        row += 1
+        
+        ttk.Label(stats_frame, text="Équilibre aéraulique:", 
+                font=("Helvetica", 12)).grid(row=row, column=0, sticky="w", pady=5)
+        balance_value = ttk.Label(stats_frame, text="0 m³/h", font=("Helvetica", 12, "bold"))
+        balance_value.grid(row=row, column=1, sticky="w", pady=5)
+        
+        # Bottom buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(20, 0))
+        
+        close_button = ttk.Button(button_frame, text="Fermer", command=summary_window.destroy)
+        close_button.pack(side=tk.RIGHT)
+        
+        # Store references to widgets for updating
+        summary_window.vent_data = {
+            "all_vents_tree": all_vents_tree,
+            "category_trees": category_trees,
+            "total_vents_value": total_vents_value,
+            "category_labels": category_labels,
+            "total_inflow_value": total_inflow_value,
+            "total_outflow_value": total_outflow_value,
+            "balance_value": balance_value
+        }
+        
+        # Create a callback handler for ventilation updates 
+        def handle_ventilation_update(data):
+            print("[View] Received ventilation summary update")
+            self.populate_ventilation_summary(summary_window, data)
+        
+        # Store the update handler reference so we can access it later to remove
+        summary_window.ventilation_update_handler = handle_ventilation_update
+        
+        # Subscribe to ventilation summary updates
+        ivy_bus.subscribe("ventilation_summary_update", handle_ventilation_update)
+        
+        # When the window is closed, manage cleanup
+        summary_window.protocol("WM_DELETE_WINDOW", 
+                               lambda: self._handle_summary_window_close(summary_window))
+        
+        # Request ventilation data from the controller AFTER setting up the handler
+        print("[View] Requesting ventilation summary data")
+        ivy_bus.publish("get_ventilation_summary_request", {})
+
+    def _handle_summary_window_close(self, summary_window):
+        """Handle cleanup when summary window is closed"""
+        # Now that we have an unsubscribe method, use it to clean up properly
+        if hasattr(summary_window, 'ventilation_update_handler'):
+            ivy_bus.unsubscribe("ventilation_summary_update", summary_window.ventilation_update_handler)
+        
+        # Destroy the window
+        summary_window.destroy()
+
+    def populate_ventilation_summary(self, summary_window, data=None):
+        """Populate the ventilation summary window with data from all floors"""
+        if not hasattr(summary_window, "vent_data"):
+            print("[View] Error: summary_window doesn't have vent_data attribute")
+            return
+            
+        widgets = summary_window.vent_data
+        all_vents_tree = widgets["all_vents_tree"]
+        category_trees = widgets["category_trees"]
+        
+        # Clear existing data
+        all_vents_tree.delete(*all_vents_tree.get_children())
+        for tree in category_trees.values():
+            tree.delete(*tree.get_children())
+            
+        # Variables to track statistics
+        total_vents = 0
+        category_counts = {
+            "extraction_interne": 0,
+            "insufflation_interne": 0,
+            "extraction_externe": 0,
+            "admission_externe": 0
+        }
+        
+        total_inflow = 0  # insufflation_interne + admission_externe
+        total_outflow = 0  # extraction_interne + extraction_externe
+        
+        vent_types = {
+            "extraction_interne": "Extraction d'air vicié",
+            "insufflation_interne": "Insufflation d'air neuf",
+            "extraction_externe": "Extraction à l'extérieur",
+            "admission_externe": "Admission d'air neuf extérieur"
+        }
+        
+        # If we received ventilation data, use it
+        vents_data = []
+        if data and "vents" in data:
+            vents_data = data["vents"]
+            print(f"[View] Processing {len(vents_data)} vents for summary display")
+        else:
+            print("[View] Warning: No ventilation data received")
+        
+        # Process all vents
+        for vent_data in vents_data:
+            vent_function = vent_data.get("function", "")
+            if not vent_function:
+                print(f"[View] Warning: Vent missing function: {vent_data}")
+                continue
+                
+            total_vents += 1
+            
+            # Increment category count
+            if vent_function in category_counts:
+                category_counts[vent_function] += 1
+            
+            # Calculate flow rates
+            try:
+                flow_rate = int(vent_data.get("flow_rate", 0)) if vent_data.get("flow_rate") else 0
+            except ValueError:
+                flow_rate = 0
+                
+            if vent_function in ["insufflation_interne", "admission_externe"]:
+                total_inflow += flow_rate
+            elif vent_function in ["extraction_interne", "extraction_externe"]:
+                total_outflow += flow_rate
+            
+            # Add to all vents tree
+            vent_type = vent_types.get(vent_function, "")
+            all_vents_tree.insert("", tk.END, values=(
+                vent_data.get("floor_name", ""),
+                vent_data.get("name", ""),
+                vent_type,
+                vent_data.get("diameter", ""),
+                vent_data.get("flow_rate", "")
+            ))
+            
+            # Add to category tree
+            if vent_function in category_trees:
+                category_trees[vent_function].insert("", tk.END, values=(
+                    vent_data.get("floor_name", ""),
+                    vent_data.get("name", ""),
+                    vent_data.get("diameter", ""),
+                    vent_data.get("flow_rate", "")
+                ))
+        
+        # Update statistics display
+        widgets["total_vents_value"].config(text=str(total_vents))
+        
+        for category, count in category_counts.items():
+            if category in widgets["category_labels"]:
+                widgets["category_labels"][category].config(text=str(count))
+        
+        widgets["total_inflow_value"].config(text=f"{total_inflow} m³/h")
+        widgets["total_outflow_value"].config(text=f"{total_outflow} m³/h")
+        
+        # Calculate balance
+        balance = total_inflow - total_outflow
+        balance_text = f"{abs(balance)} m³/h"
+        
+        if balance > 0:
+            balance_text = f"+{balance_text} (Surpression)"
+            widgets["balance_value"].config(text=balance_text, foreground="blue")
+        elif balance < 0:
+            balance_text = f"-{balance_text} (Dépression)" 
+            widgets["balance_value"].config(text=balance_text, foreground="red")
+        else:
+            balance_text = f"{balance_text} (Équilibré)"
+            widgets["balance_value"].config(text=balance_text, foreground="green")
+            
+        print(f"[View] Summary populated with {total_vents} vents. Inflow: {total_inflow}, Outflow: {total_outflow}")
 
     def _truncate_text_with_ellipsis(self, text, max_width, font):
         """Truncates text with ellipsis if it exceeds max_width pixels"""
