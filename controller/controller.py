@@ -15,12 +15,12 @@ class Controller:
         self.selected_floor_index = None
         self.current_tool = 'select'
         self.floor_count = 0
-        
+
         # Create default Floor 0
         default_floor = Floor("Etage 0")
         self.floors.append(default_floor)
         self.selected_floor_index = 0
-        
+
         # Subscribe the events that UI has published
         ivy_bus.subscribe("draw_wall_request", self.handle_draw_wall_request)
         ivy_bus.subscribe("cancal_to_draw_wall_request",self.handle_cancal_to_draw_wall_request)
@@ -63,7 +63,7 @@ class Controller:
         self.temp_vent_end   = None
         self.temp_vent_role  = None
         self.temp_vent_color = None
-        
+
         # Initialize floor height
         self._publish_height(default_floor)
 
@@ -98,8 +98,8 @@ class Controller:
                 })
 
                 self.wall_start_point = None
-                
-                # If this is the floor below the current selected floor, 
+
+                # If this is the floor below the current selected floor,
                 # update the onion skin in the floor above
                 if len(self.floors) > self.selected_floor_index + 1:
                     # Save current floor index
@@ -110,7 +110,7 @@ class Controller:
                     self._send_onion_skin_preview()
                     # Restore current floor index
                     self.selected_floor_index = current_idx
-                
+
                 # Also refresh the onion skin of the current floor if we're above floor 0
                 # Not using elif so both conditions can be true for middle floors
                 if self.selected_floor_index > 0:
@@ -136,7 +136,7 @@ class Controller:
     def handle_cancal_to_draw_wall_request(self,data):
         self.is_canceled_wall_draw = True
         self.wall_start_point = None
-        
+
         ivy_bus.publish("draw_wall_update",{
             "start": (0, 0), "end": (0, 0), "fill": "gray"
         })
@@ -162,16 +162,19 @@ class Controller:
                 current_floor.add_window(window_obj)
                 print(f"in floor {current_floor.name} create window : {window_obj}")
 
-                ivy_bus.publish("draw_window_update", {
-                    "start": window_obj.start,
-                    "end":   window_obj.end,
-                    "fill":  "#EE82EE",
-                    "thickness": window_obj.thickness,
-                })
+                ivy_bus.publish(
+                    "draw_window_update",
+                    {
+                        "start": window_obj.start,
+                        "end": window_obj.end,
+                        "fill": "#ffafcc",
+                        "thickness": window_obj.thickness,
+                    },
+                )
 
                 self.window_start_point = None
-                
-                # If this is the floor below the current selected floor, 
+
+                # If this is the floor below the current selected floor,
                 # update the onion skin in the floor above
                 if len(self.floors) > self.selected_floor_index + 1:
                     # Save current floor index
@@ -182,7 +185,7 @@ class Controller:
                     self._send_onion_skin_preview()
                     # Restore current floor index
                     self.selected_floor_index = current_idx
-                
+
                 # Also refresh the onion skin of the current floor if we're above floor 0
                 # Not using elif so both conditions can be true for middle floors
                 if self.selected_floor_index > 0:
@@ -209,11 +212,11 @@ class Controller:
     def handle_cancal_to_draw_window_request(self,data):
         self.is_canceled_window_draw = True
         self.window_start_point = None
-        
+
         ivy_bus.publish("draw_window_update",{
             "start": (0, 0), "end": (0, 0), "fill": "gray"
         })
-    
+
     def handle_draw_door_request(self, data):
         x, y = data.get("x"), data.get("y")
         is_click = data.get("is_click", False)
@@ -235,16 +238,19 @@ class Controller:
                 current_floor.add_door(door_obj)
                 print(f"in floor {current_floor.name} create door : {door_obj}")
 
-                ivy_bus.publish("draw_door_update", {
-                    "start": door_obj.start,
-                    "end": door_obj.end,
-                    "fill": "#8B4513",
-                    "thickness": door_obj.thickness,
-                })
+                ivy_bus.publish(
+                    "draw_door_update",
+                    {
+                        "start": door_obj.start,
+                        "end": door_obj.end,
+                        "fill": "#dda15e",
+                        "thickness": door_obj.thickness,
+                    },
+                )
 
                 self.door_start_point = None
-                
-                # If this is the floor below the current selected floor, 
+
+                # If this is the floor below the current selected floor,
                 # update the onion skin in the floor above
                 if len(self.floors) > self.selected_floor_index + 1:
                     # Save current floor index
@@ -255,7 +261,7 @@ class Controller:
                     self._send_onion_skin_preview()
                     # Restore current floor index
                     self.selected_floor_index = current_idx
-                
+
                 # Also refresh the onion skin of the current floor if we're above floor 0
                 # Not using elif so both conditions can be true for middle floors
                 if self.selected_floor_index > 0:
@@ -282,7 +288,7 @@ class Controller:
     def handle_cancal_to_draw_door_request(self, data):
         self.is_canceled_door_draw = True
         self.door_start_point = None
-        
+
         ivy_bus.publish("draw_door_update",{
             "start": (0, 0), "end": (0, 0), "fill": "gray"
         })   
@@ -348,14 +354,14 @@ class Controller:
         diameter = data.get("diameter", "N/A")
         flow_rate = data.get("flow_rate", "N/A")
         function = data.get("role", self.vent_role)
-        
+
         vent_obj = Vent(self.temp_vent_start, self.temp_vent_end,
                          name, diameter, flow_rate, function, self.vent_color)
-        
+
         if self.selected_floor_index is not None:
             current_floor = self.floors[self.selected_floor_index]
             current_floor.add_vent(vent_obj)
-            
+
             # Redraw with the saved properties
             ivy_bus.publish("draw_vent_update", {
                 "start": vent_obj.start, "end": vent_obj.end,
@@ -365,8 +371,8 @@ class Controller:
                 "flow": vent_obj.flow_rate,
                 "role": vent_obj.function
             })
-            
-            # If this is the floor below the current selected floor, 
+
+            # If this is the floor below the current selected floor,
             # update the onion skin in the floor above
             if len(self.floors) > self.selected_floor_index + 1:
                 # Save current floor index
@@ -377,18 +383,18 @@ class Controller:
                 self._send_onion_skin_preview()
                 # Restore current floor index
                 self.selected_floor_index = current_idx
-            
+
             # Also refresh the onion skin of the current floor if we're above floor 0
             # Not using elif so both conditions can be true for middle floors
             if self.selected_floor_index > 0:
                 self._send_onion_skin_preview()
-                
+
         # Reset temporary variables
         self.temp_vent_start = self.temp_vent_end = None
-                
+
     def handle_floor_selected_request(self, data):
         floor_idx = data.get("floor_index")
-        
+
         # Check if floor index is valid
         if floor_idx is not None and 0 <= floor_idx < len(self.floors):
             previous_floor_index = self.selected_floor_index
@@ -407,20 +413,26 @@ class Controller:
                 })
 
             for window_obj in selected_floor.windows:
-                ivy_bus.publish("draw_window_update", {
-                    "start": window_obj.start,
-                    "end":   window_obj.end,
-                    "fill":  "#EE82EE",
-                    "thickness": window_obj.thickness
-                })
+                ivy_bus.publish(
+                    "draw_window_update",
+                    {
+                        "start": window_obj.start,
+                        "end": window_obj.end,
+                        "fill": "#ffafcc",
+                        "thickness": window_obj.thickness,
+                    },
+                )
 
             for door_objet in selected_floor.doors:
-                ivy_bus.publish("draw_door_update", {
-                    "start": door_objet.start,
-                    "end":   door_objet.end,
-                    "fill":  "#8B4513",
-                    "thickness": door_objet.thickness
-                })
+                ivy_bus.publish(
+                    "draw_door_update",
+                    {
+                        "start": door_objet.start,
+                        "end": door_objet.end,
+                        "fill": "#dda15e",
+                        "thickness": door_objet.thickness,
+                    },
+                )
 
             for v in selected_floor.vents:
                 ivy_bus.publish("draw_vent_update", {
@@ -436,7 +448,7 @@ class Controller:
                 "selected_floor_index": floor_idx,
                 "floor_name": selected_floor.name
             })
-            
+
             # If this is the initial floor selection, also send the floor list
             ivy_bus.publish("new_floor_update", {
                 "floors": [f.name for f in self.floors],
@@ -444,10 +456,10 @@ class Controller:
             })
 
             self._publish_height(selected_floor)
-            
+
             # Send onion skin preview data if applicable
             self._send_onion_skin_preview()
-        
+
     def handle_new_floor_request(self, data):
         """
         When the user clicks the "New floor" button: insert a new floor above the selected floor
@@ -475,7 +487,7 @@ class Controller:
         })
 
         self._publish_height(new_floor)
-        
+
         # Send onion skin preview if we're not on the first floor
         if self.selected_floor_index > 0:
             self._send_onion_skin_preview()
@@ -513,7 +525,7 @@ class Controller:
                 "message":"L'etage doit avoir un nom"
             })
             return
-        
+
         floor_obj = self.floors[floor_index]
         floor_obj.name = new_name
 
@@ -521,7 +533,7 @@ class Controller:
         "floors": [f.name for f in self.floors],
         "selected_floor_index": self.selected_floor_index
         })
-    
+
     def handle_delete_item_request(self, data):
         if self.selected_floor_index is None:
             return
@@ -544,15 +556,15 @@ class Controller:
             floor.doors   = [d for d in floor.doors   if not same_segment(d)]
         elif obj_type == "vent":
             floor.vents   = [v for v in floor.vents   if not same_segment(v)]
-            
-        # If we are on a floor above 0, we need to refresh the onion skin 
+
+        # If we are on a floor above 0, we need to refresh the onion skin
         # in case the floor below was modified
         if self.selected_floor_index > 0:
             # Check if the floor that was modified is the one below the current floor
             if floor == self.floors[self.selected_floor_index - 1]:
                 # Refresh onion skin preview
                 self._send_onion_skin_preview()
-    
+
     def _publish_height(self, floor):
         ivy_bus.publish("floor_height_update", {"height": floor.height})
 
@@ -566,7 +578,7 @@ class Controller:
 
     def handle_delete_floor_request(self, data):
         floor_index = data.get("floor_index")
-        
+
         if floor_index is None or floor_index < 0 or floor_index >= len(self.floors):
             return
 
@@ -579,10 +591,10 @@ class Controller:
 
         # Store the floor name for logging
         deleted_floor_name = self.floors[floor_index].name
-        
+
         # Remove the floor
         self.floors.pop(floor_index)
-        
+
         # Adjust the selected floor index if needed
         if self.selected_floor_index == floor_index:
             # If we deleted the selected floor, select another one
@@ -592,16 +604,16 @@ class Controller:
         elif self.selected_floor_index > floor_index:
             # If we deleted a floor before the selected one, decrement the index
             self.selected_floor_index -= 1
-            
+
         print(f"[Controller] deleted floor {deleted_floor_name}, new selected index = {self.selected_floor_index}")
-        
+
         # Update the UI
         ivy_bus.publish("clear_canvas_update", {})
         ivy_bus.publish("new_floor_update", {
             "floors": [f.name for f in self.floors],
             "selected_floor_index": self.selected_floor_index
         })
-        
+
         # Select and draw the new floor
         selected_floor = self.floors[self.selected_floor_index]
         self.handle_floor_selected_request({"floor_index": self.selected_floor_index})
@@ -609,20 +621,20 @@ class Controller:
     def handle_onion_skin_preview_request(self, data):
         """Handle request for onion skin preview of the floor below"""
         self._send_onion_skin_preview()
-        
+
     def _send_onion_skin_preview(self):
         """Send data for onion skin preview of the floor below current floor"""
         if self.selected_floor_index is None or self.selected_floor_index <= 0:
             # No floor below to show
             return
-            
+
         # Get the floor below
         floor_below_index = self.selected_floor_index - 1
         floor_below = self.floors[floor_below_index]
-        
+
         # Prepare items to be drawn in onion skin
         items = []
-        
+
         # Add walls
         for wall in floor_below.walls:
             items.append({
@@ -630,25 +642,29 @@ class Controller:
                 "coords": (wall.start, wall.end),
                 "fill": "black"
             })
-            
+
         # Add windows
         for window in floor_below.windows:
-            items.append({
-                "type": "window",
-                "coords": (window.start, window.end),
-                "fill": "#EE82EE",
-                "thickness": window.thickness
-            })
-            
+            items.append(
+                {
+                    "type": "window",
+                    "coords": (window.start, window.end),
+                    "fill": "#ffafcc",
+                    "thickness": window.thickness,
+                }
+            )
+
         # Add doors
         for door in floor_below.doors:
-            items.append({
-                "type": "door",
-                "coords": (door.start, door.end),
-                "fill": "#8B4513",
-                "thickness": door.thickness
-            })
-            
+            items.append(
+                {
+                    "type": "door",
+                    "coords": (door.start, door.end),
+                    "fill": "#dda15e",
+                    "thickness": door.thickness,
+                }
+            )
+
         # Add vents
         for vent in floor_below.vents:
             items.append({
@@ -662,7 +678,7 @@ class Controller:
                     "function": vent.function
                 }
             })
-            
+
         # Send the data to the view
         ivy_bus.publish("onion_skin_preview_update", {
             "items": items,
@@ -675,10 +691,10 @@ class Controller:
         Save project to the selected JSON file
         """
         json_data = [floor.to_dict() for floor in self.floors]
-        
+
         # Get the JSON file path from the data
         json_file_path = data.get("json_file_path")
-        
+
         if not json_file_path:
             # Use a timestamped file in current working directory as fallback
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")

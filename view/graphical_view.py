@@ -13,6 +13,30 @@ class GraphicalView(tk.Tk):
         super().__init__()
         self.title("Application VMC")
 
+        # Check if the icon file exists before setting it
+        # Try to set the window icon using both iconbitmap and iconphoto methods
+        icon_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "photos", "icon.ico"
+        )
+        png_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "photos", "icon.png"
+        )
+        
+        # Try to apply both icon methods for better cross-platform support
+        if os.path.exists(icon_path):
+            self.iconbitmap(icon_path)
+        else:
+            print(f"Warning: Icon file not found at {icon_path}")
+            
+        if os.path.exists(png_path):
+            try:
+                icon_img = PhotoImage(file=png_path)
+                self.iconphoto(True, icon_img)
+            except tk.TclError:
+                print(f"Warning: Could not load icon as PhotoImage from {png_path}")
+        else:
+            print(f"Warning: PNG icon file not found at {png_path}")
+
         # Set initial window size
         window_width = 1280
         window_height = 720
@@ -33,7 +57,7 @@ class GraphicalView(tk.Tk):
         self.tooltips = []  # For storing button tooltips
         self.vent_tooltips = {}  # For storing vent tooltips by canvas item ID
         self.tool_buttons = {}  # Store tool buttons for styling
-        
+
         # Onion skin related variables
         self.onion_skin_items = []  # To track items drawn as part of onion skin
         self.onion_skin_opacity = 0.3  # 30% opacity for onion skin items
@@ -501,7 +525,7 @@ class GraphicalView(tk.Tk):
         # Convert window coordinates to canvas coordinates
         canvas_x = self.canvas.canvasx(event.x)
         canvas_y = self.canvas.canvasy(event.y)
-        
+
         if self.current_tool == "wall":
             ivy_bus.publish("draw_wall_request", {
                 "x": canvas_x,
@@ -543,17 +567,17 @@ class GraphicalView(tk.Tk):
             )
             if not items:
                 return
-                
+
             # Find items that are not part of the onion skin
             non_onion_items = []
             for item in items:
                 tags = self.canvas.gettags(item)
                 if "onion_skin" not in tags:
                     non_onion_items.append(item)
-                    
+
             if not non_onion_items:
                 return
-                
+
             # Get the topmost non-onion item
             item = non_onion_items[-1]
             tags = self.canvas.gettags(item)
@@ -573,7 +597,7 @@ class GraphicalView(tk.Tk):
         # Convert window coordinates to canvas coordinates
         canvas_x = self.canvas.canvasx(event.x)
         canvas_y = self.canvas.canvasy(event.y)
-        
+
         if self.current_tool == "wall":
             ivy_bus.publish("draw_wall_request", {
                 "x": canvas_x,
@@ -767,7 +791,7 @@ class GraphicalView(tk.Tk):
             }
 
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-            
+
             # Ensure all onion skin items remain below
             self._ensure_onion_skin_below()
 
@@ -795,7 +819,7 @@ class GraphicalView(tk.Tk):
                 fill=fill ,width=thickness, tags=("window",)
             )
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-            
+
             # Ensure all onion skin items remain below
             self._ensure_onion_skin_below()
 
@@ -823,7 +847,7 @@ class GraphicalView(tk.Tk):
                 fill=fill,width=thickness,tags=("door",)
             )
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-            
+
             # Ensure all onion skin items remain below
             self._ensure_onion_skin_below()
 
@@ -842,38 +866,38 @@ class GraphicalView(tk.Tk):
             if hasattr(self, "temp_vent"):
                 self.canvas.delete(self.temp_vent)
                 del self.temp_vent
-                
+
             # Calculate line angle for the arrow
             import math
             dx = end[0] - start[0]
             dy = end[1] - start[1]
             length = math.sqrt(dx*dx + dy*dy)
-            
+
             if length > 0:
                 dx, dy = dx/length, dy/length
-                
+
                 # Create the base line (using width=2 to match the onion skin)
                 item = self.canvas.create_line(
                     start[0], start[1], end[0], end[1],
                     fill=color, width=2, tags=("vent",)
                 )
-                
+
                 # Add arrowhead
                 arrow_size = 8
                 arrow_angle = 0.5  # in radians, determines arrow width
-                
+
                 # Calculate the arrowhead points
                 arrow_x1 = end[0] - arrow_size * (dx * math.cos(arrow_angle) - dy * math.sin(arrow_angle))
                 arrow_y1 = end[1] - arrow_size * (dy * math.cos(arrow_angle) + dx * math.sin(arrow_angle))
                 arrow_x2 = end[0] - arrow_size * (dx * math.cos(arrow_angle) + dy * math.sin(arrow_angle))
                 arrow_y2 = end[1] - arrow_size * (dy * math.cos(arrow_angle) - dx * math.sin(arrow_angle))
-                
+
                 # Create arrowhead with the same tag as the line
                 arrowhead = self.canvas.create_polygon(
                     end[0], end[1], arrow_x1, arrow_y1, arrow_x2, arrow_y2,
                     fill=color, outline=color, tags=("vent",)
                 )
-                
+
                 self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
                 # Create well-formatted tooltip content with explicit strings
@@ -895,7 +919,7 @@ class GraphicalView(tk.Tk):
                         'role': role,
                         'type': 'vent'  # Add type field for consistency
                     }
-                    
+
                 # Ensure all onion skin items remain below
                 self._ensure_onion_skin_below()
 
@@ -1252,7 +1276,7 @@ class GraphicalView(tk.Tk):
         # Convert window coordinates to canvas coordinates
         canvas_x = self.canvas.canvasx(event.x)
         canvas_y = self.canvas.canvasy(event.y)
-        
+
         # Find items under the cursor
         try:
             items = self.canvas.find_overlapping(canvas_x, canvas_y, canvas_x, canvas_y)
@@ -1298,10 +1322,10 @@ class GraphicalView(tk.Tk):
         """Handle window resizing events"""
         if event.widget is self:
             self._redraw_height_text()
-            
+
             # Update the canvas scrollregion to match the new size
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-            
+
             # Reset canvas view if needed
             if not self.canvas.bbox("all"):
                 self.canvas.xview_moveto(0)
@@ -1383,10 +1407,10 @@ class GraphicalView(tk.Tk):
             initialdir=os.getcwd(),
             initialfile="floors.json"
         )
-        
+
         if not json_file_path:
             return  # User cancelled the dialog
-            
+
         ivy_bus.publish("save_project_request", {
             "json_file_path": json_file_path
         })
@@ -1445,13 +1469,13 @@ class GraphicalView(tk.Tk):
         """Request the onion skin preview of the floor below"""
         if hasattr(self, 'currentFloorLabel') and self.currentFloorLabel:
             ivy_bus.publish("onion_skin_preview_request", {})
-            
+
     def draw_onion_skin_item(self, item_type, coords, fill_color=None, thickness=None, additional_data=None):
         """Draw an item as part of the onion skin with reduced opacity"""
         # Remove any existing onion skin items
         item_id = None
         opacity_color = self._apply_opacity_to_color(fill_color, self.onion_skin_opacity)
-        
+
         if item_type == "wall":
             start, end = coords
             item_id = self.canvas.create_line(
@@ -1479,37 +1503,37 @@ class GraphicalView(tk.Tk):
             dx = end[0] - start[0]
             dy = end[1] - start[1]
             length = math.sqrt(dx*dx + dy*dy)
-            
+
             if length > 0:
                 dx, dy = dx/length, dy/length
-                
+
                 # Create the base line (using width=2 to match main view)
                 item_id = self.canvas.create_line(
                     start[0], start[1], end[0], end[1],
                     fill=opacity_color, width=2, tags=("onion_skin",)
                 )
-            
+
                 # Store this onion skin item
                 self.onion_skin_items.append(item_id)
-                
+
                 # Add arrowhead
                 arrow_size = 8
                 arrow_angle = 0.5  # in radians, determines arrow width
-                
+
                 # Calculate the arrowhead points
                 arrow_x1 = end[0] - arrow_size * (dx * math.cos(arrow_angle) - dy * math.sin(arrow_angle))
                 arrow_y1 = end[1] - arrow_size * (dy * math.cos(arrow_angle) + dx * math.sin(arrow_angle))
                 arrow_x2 = end[0] - arrow_size * (dx * math.cos(arrow_angle) + dy * math.sin(arrow_angle))
                 arrow_y2 = end[1] - arrow_size * (dy * math.cos(arrow_angle) - dx * math.sin(arrow_angle))
-                
+
                 # Create arrowhead
                 arrowhead_id = self.canvas.create_polygon(
                     end[0], end[1], arrow_x1, arrow_y1, arrow_x2, arrow_y2,
                     fill=opacity_color, outline=opacity_color, tags=("onion_skin",)
                 )
-                
+
                 self.onion_skin_items.append(arrowhead_id)
-        
+
         if item_id:
             self.onion_skin_items.append(item_id)
 
@@ -1517,45 +1541,45 @@ class GraphicalView(tk.Tk):
         """Convert color to rgba with opacity"""
         if not color or color == "":
             color = "#000000"  # Default to black
-            
+
         # Handle named colors
         if color == "black":
             color = "#000000"
-        elif color == "#EE82EE":  # Window color
-            color = "#EE82EE"
-        elif color == "#8B4513":  # Door color
-            color = "#8B4513"
-            
+        elif color == "#ffafcc":  # Window color
+            color = "#ffafcc"
+        elif color == "#dda15e":  # Door color
+            color = "#dda15e"
+
         # For hex colors, mix with white background to create opacity effect
         if color.startswith("#"):
             r = int(color[1:3], 16)
             g = int(color[3:5], 16) if len(color) >= 5 else r
             b = int(color[5:7], 16) if len(color) >= 7 else g
-            
+
             # Mix with white (255,255,255) based on opacity
             r = int(r * opacity + 255 * (1 - opacity))
             g = int(g * opacity + 255 * (1 - opacity))
             b = int(b * opacity + 255 * (1 - opacity))
-            
+
             return f"#{r:02x}{g:02x}{b:02x}"
-            
+
         return color  # Return original if we can't process it
-            
+
     def clear_onion_skin(self):
         """Clear all onion skin preview items"""
         for item_id in self.onion_skin_items:
             self.canvas.delete(item_id)
         self.onion_skin_items = []
-        
+
     def on_onion_skin_preview_update(self, data):
         """Handle onion skin preview update from controller"""
         # Clear any existing onion skin items
         self.clear_onion_skin()
-        
+
         # Check if we have data to draw
         if not data or "items" not in data:
             return
-            
+
         # Draw each item in the onion skin preview
         for item in data["items"]:
             item_type = item.get("type")
@@ -1563,18 +1587,18 @@ class GraphicalView(tk.Tk):
             fill = item.get("fill", "")
             thickness = item.get("thickness")
             additional_data = item.get("additional_data")
-            
+
             self.draw_onion_skin_item(item_type, coords, fill, thickness, additional_data)
-            
+
         # Ensure all onion skin items are at the bottom of the z-order
         self._ensure_onion_skin_below()
-        
+
     def _ensure_onion_skin_below(self):
         """Ensure all onion skin items are below all other canvas items"""
         # First, lower all onion skin items
         for item_id in self.onion_skin_items:
             self.canvas.tag_lower(item_id)
-            
+
         # Then raise all regular items (walls, windows, doors, vents) above onion skin
         all_items = self.canvas.find_all()
         for item in all_items:
