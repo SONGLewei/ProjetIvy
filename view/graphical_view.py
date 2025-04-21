@@ -783,9 +783,17 @@ class GraphicalView(tk.Tk):
             )
 
         else:
+            # Clear any existing temporary lines
             if hasattr(self, "temp_line"):
                 self.canvas.delete(self.temp_line)
                 del self.temp_line
+
+            # If starting points are (0,0) and ending points are (0,0), this is likely 
+            # a reset or deletion operation, so we don't need to draw anything
+            if start == (0, 0) and end == (0, 0):
+                # This might be a deletion operation, make sure onion skin is refreshed
+                self._ensure_onion_skin_below()
+                return
 
             item = self.canvas.create_line(
                 start[0], start[1], end[0], end[1],
@@ -1966,8 +1974,16 @@ class GraphicalView(tk.Tk):
 
     def clear_onion_skin(self):
         """Clear all onion skin preview items"""
+        # Delete items by ID list
         for item_id in self.onion_skin_items:
             self.canvas.delete(item_id)
+        
+        # Also find and delete any items that might have the onion_skin tag but weren't tracked
+        onion_items = self.canvas.find_withtag("onion_skin")
+        for item in onion_items:
+            self.canvas.delete(item)
+            
+        # Reset the tracking list
         self.onion_skin_items = []
 
     def on_onion_skin_preview_update(self, data):

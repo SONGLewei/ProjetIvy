@@ -672,13 +672,21 @@ class Controller:
             # Send update for ventilation summary if a vent was deleted
             self.handle_get_ventilation_summary_request({})
 
-        # If we are on a floor above 0, we need to refresh the onion skin
-        # in case the floor below was modified
-        if self.selected_floor_index > 0:
-            # Check if the floor that was modified is the one below the current floor
-            if floor == self.floors[self.selected_floor_index - 1]:
-                # Refresh onion skin preview
-                self._send_onion_skin_preview()
+        # Always refresh the onion skin display after deletion
+        # This will ensure the onion skin is correctly updated
+        self._send_onion_skin_preview()
+
+        # Additionally, if this is the floor below the current selected floor,
+        # update the onion skin in the floor above
+        if len(self.floors) > self.selected_floor_index + 1:
+            # Save current floor index
+            current_idx = self.selected_floor_index
+            # Temporarily set selected floor to the one above
+            self.selected_floor_index = current_idx + 1
+            # Send onion skin update
+            self._send_onion_skin_preview()
+            # Restore current floor index
+            self.selected_floor_index = current_idx
 
     def _publish_height(self, floor):
         ivy_bus.publish("floor_height_update", {"height": floor.height})
