@@ -159,7 +159,14 @@ class Controller:
                 start = self.window_start_point
                 end   = (x, y)
 
-                window_obj = Window(start, end,thickness=5)
+                # Check if window overlaps with any wall and modify the wall
+                wall_modified, aligned_start, aligned_end = self._check_wall_overlap(start, end, is_window=True)
+                
+                # Create window with aligned coordinates if a wall was modified
+                if wall_modified:
+                    window_obj = Window(aligned_start, aligned_end, thickness=5)
+                else:
+                    window_obj = Window(start, end, thickness=5)
 
                 current_floor = self.floors[self.selected_floor_index]
                 current_floor.add_window(window_obj)
@@ -174,6 +181,47 @@ class Controller:
                         "thickness": window_obj.thickness,
                     },
                 )
+
+                # Redraw all walls to reflect any modifications made by _check_wall_overlap
+                ivy_bus.publish("clear_canvas_update", {})
+                
+                # Redraw all walls
+                for wall_obj in current_floor.walls:
+                    ivy_bus.publish("draw_wall_update", {
+                        "start": wall_obj.start,
+                        "end":   wall_obj.end,
+                        "fill":  "black",
+                    })
+                
+                # Redraw all windows
+                for window_item in current_floor.windows:
+                    ivy_bus.publish("draw_window_update", {
+                        "start": window_item.start,
+                        "end": window_item.end,
+                        "fill": "#ffafcc",
+                        "thickness": window_item.thickness,
+                    })
+                
+                # Redraw all doors
+                for door_item in current_floor.doors:
+                    ivy_bus.publish("draw_door_update", {
+                        "start": door_item.start,
+                        "end": door_item.end,
+                        "fill": "#dda15e",
+                        "thickness": door_item.thickness,
+                    })
+                
+                # Redraw all vents
+                for vent_item in current_floor.vents:
+                    ivy_bus.publish("draw_vent_update", {
+                        "start": vent_item.start,
+                        "end": vent_item.end,
+                        "color": vent_item.color,
+                        "name": vent_item.name,
+                        "diameter": vent_item.diameter,
+                        "flow": vent_item.flow_rate,
+                        "role": vent_item.function
+                    })
 
                 self.window_start_point = None
 
@@ -235,7 +283,14 @@ class Controller:
                 start = self.door_start_point
                 end = (x, y)
 
-                door_obj = Door(start, end, thickness=5)
+                # Check if door overlaps with any wall and modify the wall
+                wall_modified, aligned_start, aligned_end = self._check_wall_overlap(start, end, is_door=True)
+                
+                # Create door with aligned coordinates if a wall was modified
+                if wall_modified:
+                    door_obj = Door(aligned_start, aligned_end, thickness=5)
+                else:
+                    door_obj = Door(start, end, thickness=5)
 
                 current_floor = self.floors[self.selected_floor_index]
                 current_floor.add_door(door_obj)
@@ -250,6 +305,47 @@ class Controller:
                         "thickness": door_obj.thickness,
                     },
                 )
+
+                # Redraw all walls to reflect any modifications made by _check_wall_overlap
+                ivy_bus.publish("clear_canvas_update", {})
+                
+                # Redraw all walls
+                for wall_obj in current_floor.walls:
+                    ivy_bus.publish("draw_wall_update", {
+                        "start": wall_obj.start,
+                        "end":   wall_obj.end,
+                        "fill":  "black",
+                    })
+                
+                # Redraw all windows
+                for window_item in current_floor.windows:
+                    ivy_bus.publish("draw_window_update", {
+                        "start": window_item.start,
+                        "end": window_item.end,
+                        "fill": "#ffafcc",
+                        "thickness": window_item.thickness,
+                    })
+                
+                # Redraw all doors
+                for door_item in current_floor.doors:
+                    ivy_bus.publish("draw_door_update", {
+                        "start": door_item.start,
+                        "end": door_item.end,
+                        "fill": "#dda15e",
+                        "thickness": door_item.thickness,
+                    })
+                
+                # Redraw all vents
+                for vent_item in current_floor.vents:
+                    ivy_bus.publish("draw_vent_update", {
+                        "start": vent_item.start,
+                        "end": vent_item.end,
+                        "color": vent_item.color,
+                        "name": vent_item.name,
+                        "diameter": vent_item.diameter,
+                        "flow": vent_item.flow_rate,
+                        "role": vent_item.function
+                    })
 
                 self.door_start_point = None
 
@@ -845,3 +941,107 @@ class Controller:
         ivy_bus.publish("ventilation_summary_update", {
             "vents": all_vents_data
         })
+
+    def _check_wall_overlap(self, start, end, is_door=False, is_window=False):
+        """
+        Checks if a door or window overlaps with any wall and removes the overlapping wall segment.
+        Also aligns the door/window precisely with the wall's position.
+        
+        Args:
+            start: The start coordinates of the door or window
+            end: The end coordinates of the door or window
+            is_door: Whether this is a door object
+            is_window: Whether this is a window object
+            
+        Returns:
+            tuple: (bool, new_start, new_end) - Whether a wall was modified and the aligned coordinates
+        """
+        if self.selected_floor_index is None:
+            return False, start, end
+            
+        current_floor = self.floors[self.selected_floor_index]
+        
+        # Determine orientation
+        dx = abs(end[0] - start[0])
+        dy = abs(end[1] - start[1])
+        is_horizontal = dx >= dy
+        
+        for i, wall in enumerate(current_floor.walls):
+            wall_dx = abs(wall.end[0] - wall.start[0])
+            wall_dy = abs(wall.end[1] - wall.start[1])
+            is_wall_horizontal = wall_dx >= wall_dy
+            
+            # Check if orientations match (both horizontal or both vertical)
+            if is_horizontal == is_wall_horizontal:
+                if is_horizontal:
+                    # For horizontal elements, check if y-coordinates match
+                    if abs(start[1] - wall.start[1]) < 10:  # Allow small tolerance
+                        # Check for overlap in x-coordinates
+                        min_x = min(start[0], end[0])
+                        max_x = max(start[0], end[0])
+                        wall_min_x = min(wall.start[0], wall.end[0])
+                        wall_max_x = max(wall.start[0], wall.end[0])
+                        
+                        # If there's an overlap
+                        if max_x >= wall_min_x and min_x <= wall_max_x:
+                            overlap_min_x = max(min_x, wall_min_x)
+                            overlap_max_x = min(max_x, wall_max_x)
+                            
+                            # If the overlap is significant
+                            if overlap_max_x - overlap_min_x > 5:
+                                # Align the door/window exactly with the overlapping segment
+                                # Use the wall's exact y-coordinate for perfect alignment
+                                aligned_start = (overlap_min_x, wall.start[1])
+                                aligned_end = (overlap_max_x, wall.start[1])
+                                
+                                # Remove the original wall
+                                current_floor.walls.pop(i)
+                                
+                                # Create two new walls if needed (before and after the door/window)
+                                y = wall.start[1]
+                                if wall_min_x < overlap_min_x:
+                                    new_wall1 = Wall((wall_min_x, y), (overlap_min_x, y))
+                                    current_floor.add_wall(new_wall1)
+                                    
+                                if overlap_max_x < wall_max_x:
+                                    new_wall2 = Wall((overlap_max_x, y), (wall_max_x, y))
+                                    current_floor.add_wall(new_wall2)
+                                
+                                return True, aligned_start, aligned_end
+                else:
+                    # For vertical elements, check if x-coordinates match
+                    if abs(start[0] - wall.start[0]) < 10:  # Allow small tolerance
+                        # Check for overlap in y-coordinates
+                        min_y = min(start[1], end[1])
+                        max_y = max(start[1], end[1])
+                        wall_min_y = min(wall.start[1], wall.end[1])
+                        wall_max_y = max(wall.start[1], wall.end[1])
+                        
+                        # If there's an overlap
+                        if max_y >= wall_min_y and min_y <= wall_max_y:
+                            overlap_min_y = max(min_y, wall_min_y)
+                            overlap_max_y = min(max_y, wall_max_y)
+                            
+                            # If the overlap is significant
+                            if overlap_max_y - overlap_min_y > 5:
+                                # Align the door/window exactly with the overlapping segment
+                                # Use the wall's exact x-coordinate for perfect alignment
+                                aligned_start = (wall.start[0], overlap_min_y)
+                                aligned_end = (wall.start[0], overlap_max_y)
+                                
+                                # Remove the original wall
+                                current_floor.walls.pop(i)
+                                
+                                # Create two new walls if needed (before and after the door/window)
+                                x = wall.start[0]
+                                if wall_min_y < overlap_min_y:
+                                    new_wall1 = Wall((x, wall_min_y), (x, overlap_min_y))
+                                    current_floor.add_wall(new_wall1)
+                                    
+                                if overlap_max_y < wall_max_y:
+                                    new_wall2 = Wall((x, overlap_max_y), (x, wall_max_y))
+                                    current_floor.add_wall(new_wall2)
+                                
+                                return True, aligned_start, aligned_end
+        
+        return False, start, end
