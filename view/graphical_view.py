@@ -146,6 +146,7 @@ class GraphicalView(tk.Tk):
             'save':   os.path.join(base_path, 'photos', 'diskette.png'),
             'import': os.path.join(base_path, 'photos', 'import.png'),
             'document': os.path.join(base_path, 'photos', 'document.png'),
+            'reset': os.path.join(base_path, 'photos', 'broom.png'),
         }
         for name, path in icon_paths.items():
             try:
@@ -264,6 +265,32 @@ class GraphicalView(tk.Tk):
         document_tooltip = Tooltip(self)
         document_tooltip._attach_to_widget(document_canvas, "Vue textuelle")
         self.tooltips.append(document_tooltip)
+
+        # Create Reset button
+        reset_btn_frame = tk.Frame(leftFrame, bg=self.colors["topbar_bg"])
+        reset_btn_frame.pack(side=tk.LEFT, padx=(5, 0))
+
+        reset_canvas = tk.Canvas(
+            reset_btn_frame,
+            width=45,
+            height=45,
+            bg="white",
+            highlightthickness=0,
+            cursor="hand2"
+        )
+        reset_canvas.pack()
+
+        # Add Reset icon
+        if 'reset' in self.icons:
+            reset_canvas.create_image(45//2, 45//2, image=self.icons['reset'])
+
+        # Bind click event
+        reset_canvas.bind("<Button-1>", lambda e: self.on_reset_button_click())
+
+        # Create tooltip for Reset button
+        reset_tooltip = Tooltip(self)
+        reset_tooltip._attach_to_widget(reset_canvas, "Réinitialiser")
+        self.tooltips.append(reset_tooltip)
 
         # Continue with the center frame and other elements
         centerFrame = tk.Frame(topBarFrame, bg=self.colors["topbar_bg"])
@@ -2044,3 +2071,17 @@ class GraphicalView(tk.Tk):
                     self.ventilation_summary_window = None
         
         # Removed alert message for a cleaner experience
+
+    def on_reset_button_click(self):
+        """Handle reset button click with confirmation dialog"""
+        # Show confirmation dialog
+        confirm = messagebox.askokcancel(
+            title="Confirmation de réinitialisation",
+            message="Êtes-vous sûr de vouloir réinitialiser l'application ?\n\nToutes les modifications non sauvegardées seront perdues.",
+            icon=messagebox.WARNING
+        )
+        
+        # If user confirmed, send reset request to controller
+        if confirm:
+            ivy_bus.publish("reset_app_request", {})
+            

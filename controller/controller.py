@@ -47,6 +47,9 @@ class Controller:
         
         # Add a handler for ventilation summary requests
         ivy_bus.subscribe("get_ventilation_summary_request", self.handle_get_ventilation_summary_request)
+        
+        # Add a handler for reset application requests
+        ivy_bus.subscribe("reset_app_request", self.handle_reset_app_request)
 
         self.wall_start_point = None
         self.is_canceled_wall_draw = False
@@ -1053,3 +1056,61 @@ class Controller:
                                 return True, aligned_start, aligned_end
         
         return False, start, end
+
+    def handle_reset_app_request(self, data):
+        """
+        Resets the application to its initial state.
+        Clears all floors, walls, vents, etc. and creates a default floor.
+        """
+        # Create a new default floor
+        default_floor = Floor("Etage 0")
+        
+        # Reset all app state
+        self.floors = [default_floor]
+        self.selected_floor_index = 0
+        self.current_tool = 'select'
+        self.floor_count = 0
+        
+        # Reset all drawing state
+        self.wall_start_point = None
+        self.is_canceled_wall_draw = False
+        self.window_start_point = None
+        self.is_canceled_window_draw = False
+        self.door_start_point = None
+        self.is_canceled_door_draw = False
+        self.vent_start_point = None
+        self.is_canceled_vent_draw = False
+        self.vent_role = None
+        self.vent_color = None
+        self.temp_vent_start = None
+        self.temp_vent_end = None
+        self.temp_vent_role = None
+        self.temp_vent_color = None
+        
+        # Clear the canvas
+        ivy_bus.publish("clear_canvas_update", {})
+        
+        # Update floor list in UI
+        ivy_bus.publish("new_floor_update", {
+            "floors": [f.name for f in self.floors],
+            "selected_floor_index": self.selected_floor_index
+        })
+        
+        # Update floor selection in UI
+        ivy_bus.publish("floor_selected_update", {
+            "selected_floor_index": self.selected_floor_index,
+            "floor_name": default_floor.name
+        })
+        
+        # Update floor height
+        self._publish_height(default_floor)
+        
+        # Reset tool selection
+        ivy_bus.publish("tool_selected_update", {
+            "tool": self.current_tool
+        })
+        
+        # Reset ventilation summary
+        self.handle_get_ventilation_summary_request({})
+        
+        print("[Controller] Application has been reset to initial state")
