@@ -21,20 +21,9 @@ class GraphicalView(tk.Tk):
             os.path.dirname(os.path.abspath(__file__)), "photos", "icon.png"
         )
         
-        # For Windows, we need to use both approaches - the .ico for the taskbar icon
+        # Try to apply both icon methods for better cross-platform support
         if os.path.exists(icon_path):
-            try:
-                self.iconbitmap(icon_path)
-                # On Windows, also try setting the taskbar icon
-                if os.name == "nt":
-                    try:
-                        import ctypes
-                        myappid = f'company.myproduct.version'  # Arbitrary string
-                        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-                    except:
-                        print("Could not set Windows taskbar icon")
-            except tk.TclError:
-                print(f"Warning: Failed to set icon using iconbitmap for {icon_path}")
+            self.iconbitmap(icon_path)
         else:
             print(f"Warning: Icon file not found at {icon_path}")
             
@@ -95,6 +84,9 @@ class GraphicalView(tk.Tk):
         self._create_layout()
 
         self.bind("<Configure>", self._on_window_configure)
+        
+        # Add Esc key binding to cancel drawing operations
+        self.bind("<Escape>", self.on_escape_key)
 
         # Subscribe to events from controller
         ivy_bus.subscribe("draw_wall_update",         self.on_draw_wall_update)
@@ -691,12 +683,12 @@ class GraphicalView(tk.Tk):
             "floor_index": floor_index
         })
 
-    def on_floor_button_right_click(self,event,floor_index):
-        menu = tk.Menu(self,tearoff=0)
+    def on_floor_button_right_click(self, event, floor_index):
+        menu = tk.Menu(self, tearoff=0)
 
         menu.add_command(
             label="Renommer",
-            command=lambda:self.on_rename_floor(floor_index)
+            command=lambda: self.on_rename_floor(floor_index)
         )
 
         menu.add_command(
@@ -711,18 +703,18 @@ class GraphicalView(tk.Tk):
             command=lambda: self.on_delete_floor(floor_index)
         )
 
-        menu.tk_popup(event.x_root,event.y_root)
+        menu.tk_popup(event.x_root, event.y_root)
 
-    def on_rename_floor(self,floor_index):
-        new_name=simpledialog.askstring(
+    def on_rename_floor(self, floor_index):
+        new_name = simpledialog.askstring(
             title="Renommer l'etage",
             prompt="Entrez le nouveau nom de l'etage : "
         )
 
         if new_name:
-            ivy_bus.publish("rename_floor_request",{
-                "floor_index":floor_index,
-                "new_name": new_name 
+            ivy_bus.publish("rename_floor_request", {
+                "floor_index": floor_index,
+                "new_name": new_name
             })
 
     def show_vent_type_menu(self):
@@ -757,7 +749,7 @@ class GraphicalView(tk.Tk):
 
         menu.tk_popup(self.winfo_pointerx(), self.winfo_pointery())
 
-    def on_vent_type_selected(self,role,color):
+    def on_vent_type_selected(self, role, color):
         self.vent_role = role
         self.vent_color = color
 
@@ -1156,7 +1148,11 @@ class GraphicalView(tk.Tk):
 
             # Bind click events
             canvas.bind("<Button-1>", lambda e, idx=i: self.on_floor_button_click(idx))
-            canvas.bind("<Button-3>", lambda e, idx=i: self.on_floor_button_right_click(e, idx))
+            canvas.bind("<Button-2>", lambda e, idx=i: self.on_floor_button_right_click(e, idx))  # For macOS
+            canvas.bind("<Button-3>", lambda e, idx=i: self.on_floor_button_right_click(e, idx))  # For Windows/Linux
+            
+            # For Control+click on macOS (another way to right-click)
+            canvas.bind("<Control-Button-1>", lambda e, idx=i: self.on_floor_button_right_click(e, idx))
 
             # Add tooltip with full text if truncated
             if display_text != floor_name:
@@ -1615,3 +1611,16 @@ class GraphicalView(tk.Tk):
             tags = self.canvas.gettags(item)
             if tags and "onion_skin" not in tags:
                 self.canvas.tag_raise(item)
+
+    def on_escape_key(self, event):
+        """Handle Esc key press to cancel the current drawing operation"""
+        if self.current_tool == 'wall':
+            ivy_bus.publish("cancal_to_draw_wall_request", {})
+        elif self.current_tool == 'window':
+            ivy_bus.publish("cancal_to_draw_window_request", {})
+        elif self.current_tool == 'door':
+            ivy_bus.publish("cancal_to_draw_door_request", {})
+        elif self.current_tool == 'vent':
+            ivy_bus.publish("cancal_to_draw_vent_request", {})
+        
+        # Removed alert message for a cleaner experience

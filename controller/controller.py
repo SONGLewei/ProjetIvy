@@ -352,7 +352,7 @@ class Controller:
 
         name = data.get("name", "Unnamed")
         diameter = data.get("diameter", "N/A")
-        flow_rate = data.get("flow_rate", "N/A")
+        flow_rate = data.get("flow", "N/A")
         function = data.get("role", self.vent_role)
 
         vent_obj = Vent(self.temp_vent_start, self.temp_vent_end,
@@ -704,10 +704,8 @@ class Controller:
         with open(json_file_path, "w", encoding="utf-8") as f:
             json.dump(json_data, f, indent=4, ensure_ascii=False)
 
-        ivy_bus.publish("show_alert_request", {
-            "title": "Enregistré avec succès",
-            "message": f"Projet enregistré dans le fichier: \n{json_file_path}"
-        })
+        # Success alert removed for a cleaner experience
+        print(f"[Controller] Project saved to: {json_file_path}")
 
     def handle_import_project_request(self, data):
 
@@ -754,10 +752,11 @@ class Controller:
 
             # vents
             for v in f_dict.get("vents", []):
+                flow_rate = v.get("flow_rate", "") or v.get("flow", "")  # Try both keys for compatibility
                 floor_obj.add_vent(
                     Vent(tuple(v["start"]), tuple(v["end"]),
                         v.get("name", ""), v.get("diameter", ""),
-                        v.get("flow_rate", ""), v.get("function", ""),
+                        flow_rate, v.get("function", ""),
                         v.get("color", "#000"))
                 )
 
@@ -782,7 +781,5 @@ class Controller:
 
         self.handle_floor_selected_request({"floor_index": 0})
 
-        ivy_bus.publish("show_alert_request", {
-            "title": "Importation terminée",
-            "message": "Projet importé avec succès"
-        })
+        # Success alert removed for a cleaner experience
+        print(f"[Controller] Project imported successfully from: {json_path}")
