@@ -359,6 +359,23 @@ class GraphicalView(tk.Tk):
         vbar = ttk.Scrollbar(drawWrap, orient="vertical")
         hbar = ttk.Scrollbar(drawWrap, orient="horizontal")
 
+        # Load grid background image
+        grid_img_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "photos", "grid.png"
+        )
+        if os.path.exists(grid_img_path):
+            try:
+                self.grid_image = PhotoImage(file=grid_img_path)
+                # Set the grid image resolution
+                self.grid_image = self.grid_image.subsample(2, 2)  # Reduce resolution by half
+                self.use_grid_background = True
+            except tk.TclError:
+                print(f"Warning: Could not load grid image from {grid_img_path}")
+                self.use_grid_background = False
+        else:
+            print(f"Warning: Grid image file not found at {grid_img_path}")
+            self.use_grid_background = False
+
         # Create canvas with border on right and bottom
         self.canvas = tk.Canvas(
             drawWrap, bg="white", highlightthickness=1,
@@ -368,23 +385,28 @@ class GraphicalView(tk.Tk):
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # Connect scrollbars to canvas (without displaying them)
-        vbar.config(command=self.canvas.yview)
-        hbar.config(command=self.canvas.xview)
+        vbar.config(command=self._on_canvas_y_scroll)
+        hbar.config(command=self._on_canvas_x_scroll)
 
+        # Initialize background tile image IDs to track and update them
+        self.bg_tile_ids = []
+        
         def _on_canvas_configure(evt):
             self.canvas.configure(scrollregion=self.canvas.bbox("all") or (0, 0, 0, 0))
             self._redraw_height_text()
+            # Redraw the background grid when canvas size changes
+            self._update_grid_background()
 
         self.canvas.bind("<Configure>", _on_canvas_configure)
 
         # Bind mousewheel events for scrolling
-        self.canvas.bind("<MouseWheel>", lambda event: self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units"))
-        self.canvas.bind("<Shift-MouseWheel>", lambda event: self.canvas.xview_scroll(int(-1 * (event.delta / 120)), "units"))
+        self.canvas.bind("<MouseWheel>", self._on_mousewheel_y)
+        self.canvas.bind("<Shift-MouseWheel>", self._on_mousewheel_x)
         # For Linux/macOS
-        self.canvas.bind("<Button-4>", lambda event: self.canvas.yview_scroll(-1, "units"))
-        self.canvas.bind("<Button-5>", lambda event: self.canvas.yview_scroll(1, "units"))
-        self.canvas.bind("<Shift-Button-4>", lambda event: self.canvas.xview_scroll(-1, "units"))
-        self.canvas.bind("<Shift-Button-5>", lambda event: self.canvas.xview_scroll(1, "units"))
+        self.canvas.bind("<Button-4>", self._on_button4)
+        self.canvas.bind("<Button-5>", self._on_button5)
+        self.canvas.bind("<Shift-Button-4>", self._on_shift_button4)
+        self.canvas.bind("<Shift-Button-5>", self._on_shift_button5)
 
         self.canvas.bind("<Button-1>", self.on_canvas_left_click)
         self.canvas.bind("<Button-3>", self.on_canvas_right_click)
@@ -441,6 +463,41 @@ class GraphicalView(tk.Tk):
 
         # Bottom border for right panel
         tk.Frame(rightContainer, height=1, bg="#cccccc").pack(side=tk.BOTTOM, fill=tk.X)
+        
+    # Custom scroll handlers that update grid when scrolling
+    def _on_canvas_x_scroll(self, *args):
+        self.canvas.xview(*args)
+        # After scrolling, update the grid background
+        self.after(10, self._update_grid_background)
+        
+    def _on_canvas_y_scroll(self, *args):
+        self.canvas.yview(*args)
+        # After scrolling, update the grid background
+        self.after(10, self._update_grid_background)
+        
+    def _on_mousewheel_y(self, event):
+        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        self.after(10, self._update_grid_background)
+        
+    def _on_mousewheel_x(self, event):
+        self.canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
+        self.after(10, self._update_grid_background)
+        
+    def _on_button4(self, event):
+        self.canvas.yview_scroll(-1, "units")
+        self.after(10, self._update_grid_background)
+        
+    def _on_button5(self, event):
+        self.canvas.yview_scroll(1, "units")
+        self.after(10, self._update_grid_background)
+        
+    def _on_shift_button4(self, event):
+        self.canvas.xview_scroll(-1, "units")
+        self.after(10, self._update_grid_background)
+        
+    def _on_shift_button5(self, event):
+        self.canvas.xview_scroll(1, "units")
+        self.after(10, self._update_grid_background)
 
     def _create_compass_layer(self, parent_frame):
         self.compass_canvas = tk.Canvas(parent_frame, width=80, height=120,
@@ -615,18 +672,18 @@ class GraphicalView(tk.Tk):
             if not items:
                 return
 
-            # Find items that are not part of the onion skin
-            non_onion_items = []
+            # Find items that are not part of the onion skin or background
+            valid_items = []
             for item in items:
                 tags = self.canvas.gettags(item)
-                if "onion_skin" not in tags:
-                    non_onion_items.append(item)
+                if "onion_skin" not in tags and "background" not in tags:
+                    valid_items.append(item)
 
-            if not non_onion_items:
+            if not valid_items:
                 return
 
-            # Get the topmost non-onion item
-            item = non_onion_items[-1]
+            # Get the topmost non-onion, non-background item
+            item = valid_items[-1]
             tags = self.canvas.gettags(item)
             if not tags:
                 return
@@ -1360,20 +1417,6 @@ class GraphicalView(tk.Tk):
         message = data.get("message", "Something went wrong.")
 
         messagebox.showwarning(title, message)
-
-    def on_clear_canvas_update(self, data):
-        # Clear the main canvas
-        self.canvas.delete("all")
-        self.canvas_item_meta = {}  # Clear meta data
-        self.vent_tooltips = {}  # Clear vent tooltips
-        self.onion_skin_items = []  # Clear onion skin items
-        if self.height_text_id:
-            self.canvas.delete(self.height_text_id)
-            self.height_text_id = None
-        self.current_floor_height = None
-        self.canvas.configure(scrollregion=(0, 0, self.canvas.winfo_width(), self.canvas.winfo_height()))
-        self.canvas.xview_moveto(0)
-        self.canvas.yview_moveto(0)
 
     def _schedule_hover(self, item, x_root, y_root):
         """Schedule showing a tooltip for an item after a delay"""
@@ -2200,3 +2243,77 @@ class GraphicalView(tk.Tk):
             self.placement_tooltip.destroy()
             self.placement_tooltip = None
             self.placement_element_type = None
+
+    def _update_grid_background(self):
+        """Create a tiled background using the grid image"""
+        if not hasattr(self, 'use_grid_background') or not self.use_grid_background:
+            return
+
+        # Clear existing background tiles
+        for tile_id in self.bg_tile_ids:
+            self.canvas.delete(tile_id)
+        self.bg_tile_ids = []
+
+        # Get canvas size and image dimensions
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        if canvas_width <= 1 or canvas_height <= 1:  # Canvas not fully initialized yet
+            return
+
+        img_width = self.grid_image.width()
+        img_height = self.grid_image.height()
+
+        # Ensure grid extends beyond the visible area for scrolling
+        visible_left = int(self.canvas.canvasx(0))
+        visible_top = int(self.canvas.canvasy(0))
+        visible_right = visible_left + canvas_width
+        visible_bottom = visible_top + canvas_height
+
+        # Calculate the range to cover with tiles (with a bit of extra padding)
+        padding = max(img_width, img_height) * 2
+        min_x = max(0, visible_left - padding)
+        min_y = max(0, visible_top - padding)
+        max_x = visible_right + padding
+        max_y = visible_bottom + padding
+
+        # Calculate the starting grid points aligned to image size
+        start_x = min_x - (min_x % img_width)
+        start_y = min_y - (min_y % img_height)
+
+        # Create tiles
+        for x in range(start_x, max_x, img_width):
+            for y in range(start_y, max_y, img_height):
+                # Create tile and add to background layer (behind all items)
+                tile_id = self.canvas.create_image(x, y, image=self.grid_image, anchor='nw', tags='background')
+                self.bg_tile_ids.append(tile_id)
+                # Ensure background tiles stay in background
+                self.canvas.lower(tile_id)
+        
+        # Ensure onion skin preview items are above the background
+        self._ensure_onion_skin_below()
+
+    def on_clear_canvas_update(self, data):
+        # Store the background tile IDs before clearing
+        bg_tile_ids = self.bg_tile_ids.copy() if hasattr(self, 'bg_tile_ids') else []
+        
+        # Clear the main canvas
+        self.canvas.delete("all")
+        
+        # Reset tracking variables
+        self.bg_tile_ids = []
+        self.canvas_item_meta = {}  # Clear meta data
+        self.vent_tooltips = {}  # Clear vent tooltips
+        self.onion_skin_items = []  # Clear onion skin items
+        
+        if self.height_text_id:
+            self.height_text_id = None
+            
+        self.current_floor_height = None
+        
+        # Reset the canvas view position
+        self.canvas.configure(scrollregion=(0, 0, self.canvas.winfo_width(), self.canvas.winfo_height()))
+        self.canvas.xview_moveto(0)
+        self.canvas.yview_moveto(0)
+        
+        # Redraw the background grid
+        self._update_grid_background()
