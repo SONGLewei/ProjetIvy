@@ -7,6 +7,7 @@ from tkinter import messagebox
 from ivy.ivy_bus import ivy_bus
 from view.tooltip import Tooltip 
 from tkinter import filedialog
+from tkinter import Toplevel, Label, StringVar
 
 class GraphicalView(tk.Tk):
     def __init__(self):
@@ -65,6 +66,11 @@ class GraphicalView(tk.Tk):
         self.current_hover_item = None 
         self.height_text_id = None
         self.current_floor_height = None
+        
+        # Placement tooltip for showing element info during placement
+        self.placement_tooltip = None
+        self.placement_tooltip_text = StringVar(self)
+        self.placement_element_type = None
 
         self.colors = {
             "topbar_bg": "white",  # White top bar
@@ -645,6 +651,9 @@ class GraphicalView(tk.Tk):
                 "y": canvas_y,
                 "is_preview": True
             })
+            # Update placement tooltip position
+            if self.placement_tooltip:
+                self.placement_tooltip.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 15}")
 
         if self.current_tool == "window":
             ivy_bus.publish("draw_window_request", {
@@ -652,12 +661,19 @@ class GraphicalView(tk.Tk):
                 "y": canvas_y,
                 "is_preview": True
             })
+            # Update placement tooltip position
+            if self.placement_tooltip:
+                self.placement_tooltip.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 15}")
+
         if self.current_tool == "door":
             ivy_bus.publish("draw_door_request", {
                 "x": canvas_x,
                 "y": canvas_y,
                 "is_preview": True
             })
+            # Update placement tooltip position
+            if self.placement_tooltip:
+                self.placement_tooltip.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 15}")
 
         if self.current_tool == "vent" and self.vent_role:
             ivy_bus.publish("draw_vent_request", {
@@ -667,6 +683,9 @@ class GraphicalView(tk.Tk):
                 "role": self.vent_role,
                 "color": self.vent_color
             })
+            # Update placement tooltip position
+            if self.placement_tooltip:
+                self.placement_tooltip.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 15}")
 
         self._handle_hover(event)
 
@@ -674,15 +693,19 @@ class GraphicalView(tk.Tk):
     def on_canvas_right_click(self,event):
         if self.current_tool == "wall":
             ivy_bus.publish("cancal_to_draw_wall_request",{})
+            self._hide_placement_tooltip()
 
         if self.current_tool == "window":
             ivy_bus.publish("cancal_to_draw_window_request",{})
+            self._hide_placement_tooltip()
 
         if self.current_tool == "door":
             ivy_bus.publish("cancal_to_draw_door_request",{})
+            self._hide_placement_tooltip()
 
         if self.current_tool == "vent":
             ivy_bus.publish("cancal_to_draw_vent_request", {})
+            self._hide_placement_tooltip()
 
     def on_new_floor_button_click(self):
         ivy_bus.publish("new_floor_request", {})
@@ -808,12 +831,21 @@ class GraphicalView(tk.Tk):
                 start[0], start[1], end[0], end[1],
                 fill="gray", dash=(4, 2) ,width=5               
             )
+            
+            # Calculate length for placement tooltip
+            if start != (0, 0) or end != (0, 0):  # Only update if not resetting
+                dx = end[0] - start[0]
+                dy = end[1] - start[1]
+                length_px = (dx**2 + dy**2)**0.5
+                length_m = length_px * (2.0/40.0)  # Convert to meters based on scale
+                self._show_placement_tooltip("Mur", length_m)
 
         else:
             # Clear any existing temporary lines
             if hasattr(self, "temp_line"):
                 self.canvas.delete(self.temp_line)
                 del self.temp_line
+                self._hide_placement_tooltip()  # Hide tooltip when placement is done
 
             # If starting points are (0,0) and ending points are (0,0), this is likely 
             # a reset or deletion operation, so we don't need to draw anything
@@ -857,11 +889,20 @@ class GraphicalView(tk.Tk):
                 start[0], start[1], end[0], end[1],
                 fill="gray", dash=(4, 2), width=thickness               
             )
+            
+            # Calculate length for placement tooltip
+            if start != (0, 0) or end != (0, 0):  # Only update if not resetting
+                dx = end[0] - start[0]
+                dy = end[1] - start[1]
+                length_px = (dx**2 + dy**2)**0.5
+                length_m = length_px * (2.0/40.0)  # Convert to meters based on scale
+                self._show_placement_tooltip("Fenêtre", length_m)
 
         else:
             if hasattr(self, "temp_line"):
                 self.canvas.delete(self.temp_line)
                 del self.temp_line
+                self._hide_placement_tooltip()  # Hide tooltip when placement is done
 
             item = self.canvas.create_line(
                 start[0], start[1], end[0], end[1],
@@ -898,11 +939,20 @@ class GraphicalView(tk.Tk):
                 start[0], start[1], end[0], end[1],
                 fill="gray", dash=(4, 2), width=thickness
             )
+            
+            # Calculate length for placement tooltip
+            if start != (0, 0) or end != (0, 0):  # Only update if not resetting
+                dx = end[0] - start[0]
+                dy = end[1] - start[1]
+                length_px = (dx**2 + dy**2)**0.5
+                length_m = length_px * (2.0/40.0)  # Convert to meters based on scale
+                self._show_placement_tooltip("Porte", length_m)
 
         else:
             if hasattr(self, "temp_line"):
                 self.canvas.delete(self.temp_line)
                 del self.temp_line
+                self._hide_placement_tooltip()  # Hide tooltip when placement is done
 
             item = self.canvas.create_line(
                 start[0], start[1], end[0], end[1],
@@ -937,10 +987,33 @@ class GraphicalView(tk.Tk):
                 start[0], start[1], end[0], end[1],
                 fill="gray", dash=(4, 2), width=4
             )
+            
+            # Calculate length for placement tooltip
+            if start != (0, 0) or end != (0, 0):  # Only update if not resetting
+                dx = end[0] - start[0]
+                dy = end[1] - start[1]
+                length_px = (dx**2 + dy**2)**0.5
+                length_m = length_px * (2.0/40.0)  # Convert to meters based on scale
+                
+                # Get the correct vent type name
+                vent_type = "Ventilation"
+                if hasattr(self, "vent_role"):
+                    role_map = {
+                        "insufflation_interne": "Insuff. Interne",
+                        "insufflation_externe": "Insuff. Externe",
+                        "extraction_interne": "Extract. Interne",
+                        "extraction_externe": "Extract. Externe"
+                    }
+                    if self.vent_role in role_map:
+                        vent_type = role_map[self.vent_role]
+                
+                self._show_placement_tooltip(vent_type, length_m)
+
         else:
             if hasattr(self, "temp_vent"):
                 self.canvas.delete(self.temp_vent)
                 del self.temp_vent
+                self._hide_placement_tooltip()  # Hide tooltip when placement is done
 
             # Calculate line angle for the arrow
             import math
@@ -2052,12 +2125,16 @@ class GraphicalView(tk.Tk):
         """Handle Esc key press to cancel the current drawing operation"""
         if self.current_tool == 'wall':
             ivy_bus.publish("cancal_to_draw_wall_request", {})
+            self._hide_placement_tooltip()
         elif self.current_tool == 'window':
             ivy_bus.publish("cancal_to_draw_window_request", {})
+            self._hide_placement_tooltip()
         elif self.current_tool == 'door':
             ivy_bus.publish("cancal_to_draw_door_request", {})
+            self._hide_placement_tooltip()
         elif self.current_tool == 'vent':
             ivy_bus.publish("cancal_to_draw_vent_request", {})
+            self._hide_placement_tooltip()
             
             # If we have an open ventilation summary window, ensure it's properly tracked
             if hasattr(self, 'ventilation_summary_window') and self.ventilation_summary_window is not None:
@@ -2085,3 +2162,41 @@ class GraphicalView(tk.Tk):
         if confirm:
             ivy_bus.publish("reset_app_request", {})
             
+    # Placement tooltip methods
+    def _show_placement_tooltip(self, element_type, length_m):
+        """Show or update the placement tooltip with element type and length"""
+        if not self.placement_tooltip:
+            # Create the tooltip window
+            self.placement_tooltip = Toplevel(self)
+            self.placement_tooltip.wm_overrideredirect(True)
+            self.placement_tooltip.attributes("-topmost", True)
+            
+            # Configure tooltip appearance
+            self.placement_tooltip.configure(background="#f0f8ff", highlightbackground="#d0e0ff", highlightthickness=1)
+            
+            # Create and configure label
+            label = Label(self.placement_tooltip, 
+                          textvariable=self.placement_tooltip_text,
+                          justify="left",
+                          background="#f0f8ff", 
+                          foreground="#333333", 
+                          relief="flat",
+                          font=("Arial", 11, "bold"),
+                          padx=8, 
+                          pady=5)
+            label.pack(ipadx=6, ipady=4, fill="both", expand=True)
+        
+        # Update text and element type
+        self.placement_element_type = element_type
+        tooltip_text = f"{element_type}: {length_m:.2f} m"
+        self.placement_tooltip_text.set(tooltip_text)
+        
+        # Force update to ensure tooltip appears correctly
+        self.placement_tooltip.update_idletasks()
+    
+    def _hide_placement_tooltip(self):
+        """Hide the placement tooltip"""
+        if self.placement_tooltip:
+            self.placement_tooltip.destroy()
+            self.placement_tooltip = None
+            self.placement_element_type = None

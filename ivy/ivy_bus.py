@@ -19,10 +19,8 @@ class IvyBus:
         """
         if event_name in self._subscribers:
             if callback is None:
-                # Remove all callbacks for this event
                 self._subscribers[event_name] = []
             else:
-                # Remove specific callback
                 if callback in self._subscribers[event_name]:
                     self._subscribers[event_name].remove(callback)
 
