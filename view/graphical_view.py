@@ -100,13 +100,15 @@ class GraphicalView(tk.Tk):
         ivy_bus.subscribe("new_floor_update",         self.on_new_floor_update)
         ivy_bus.subscribe("tool_selected_update",     self.on_tool_selected_update)
         ivy_bus.subscribe("show_alert_request",       self.on_show_alert_request)
-        ivy_bus.subscribe("clear_canvas_update",      self.on_clear_canvas_update)
         ivy_bus.subscribe("draw_window_update",       self.on_draw_window_update)
         ivy_bus.subscribe("draw_door_update",         self.on_draw_door_update)
         ivy_bus.subscribe("vent_need_info_request",   self.on_vent_need_info_request)
         ivy_bus.subscribe("draw_vent_update",         self.on_draw_vent_update)
         ivy_bus.subscribe("floor_height_update",      self.on_floor_height_update)
         ivy_bus.subscribe("onion_skin_preview_update", self.on_onion_skin_preview_update)
+        ivy_bus.subscribe("clear_canvas_update",      self.on_clear_canvas_update)
+        ivy_bus.subscribe("ventilation_summary_update", self.populate_ventilation_summary)
+        ivy_bus.subscribe("ensure_onion_skin_refresh", self.on_ensure_onion_skin_refresh)
 
         # Set initial cursor
         self.current_tool = 'select'  # Default tool
@@ -909,6 +911,8 @@ class GraphicalView(tk.Tk):
             if start == (0, 0) and end == (0, 0):
                 # This might be a deletion operation, make sure onion skin is refreshed
                 self._ensure_onion_skin_below()
+                # Also request a fresh onion skin to ensure it's displayed correctly
+                self.after(100, self._request_onion_skin_preview)
                 return
 
             item = self.canvas.create_line(
@@ -2317,3 +2321,9 @@ class GraphicalView(tk.Tk):
         
         # Redraw the background grid
         self._update_grid_background()
+
+    def on_ensure_onion_skin_refresh(self, data):
+        """Handles the ensure_onion_skin_refresh event by requesting a fresh onion skin preview"""
+        self._request_onion_skin_preview()
+        # Ensure the onion skin appears in the correct z-order
+        self.after(50, self._ensure_onion_skin_below)

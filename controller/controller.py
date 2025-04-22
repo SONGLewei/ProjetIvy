@@ -690,6 +690,9 @@ class Controller:
             self._send_onion_skin_preview()
             # Restore current floor index
             self.selected_floor_index = current_idx
+            
+        # Force view to refresh onion skin after deletion
+        ivy_bus.publish("ensure_onion_skin_refresh", {})
 
     def _publish_height(self, floor):
         ivy_bus.publish("floor_height_update", {"height": floor.height})
@@ -924,6 +927,13 @@ class Controller:
         
         # Send ventilation summary data after importing
         self.handle_get_ventilation_summary_request({})
+
+        # If the first floor is selected and there's more than one floor, force onion skin refresh
+        if self.selected_floor_index > 0:
+            self._send_onion_skin_preview()
+        
+        # Force view to refresh onion skin
+        ivy_bus.publish("ensure_onion_skin_refresh", {})
 
         # Success alert removed for a cleaner experience
         print(f"[Controller] Project imported successfully from: {json_path}")
