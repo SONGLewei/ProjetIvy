@@ -7,6 +7,7 @@ from model.floor import Floor
 from model.window import Window
 from model.door import Door
 from model.vent import Vent
+from model.plenum import Plenum
 from tkinter import simpledialog
 
 class Controller:
@@ -51,6 +52,10 @@ class Controller:
         # Add a handler for reset application requests
         ivy_bus.subscribe("reset_app_request", self.handle_reset_app_request)
 
+        ivy_bus.subscribe("create_plenum_request", self.handle_create_plenum_request)
+
+
+
         self.wall_start_point = None
         self.is_canceled_wall_draw = False
 
@@ -69,6 +74,8 @@ class Controller:
         self.temp_vent_end   = None
         self.temp_vent_role  = None
         self.temp_vent_color = None
+
+        self.the_plenum = None
 
         # Initialize floor height
         self._publish_height(default_floor)
@@ -549,6 +556,13 @@ class Controller:
                     "role": v.function
                 })
 
+            for p in getattr(selected_floor, "plenums", []):
+                ivy_bus.publish("draw_plenum_update", {
+                    "start": p.start,
+                    "end": p.end,
+                    "max_flow": p.max_flow
+                })
+
             ivy_bus.publish("floor_selected_update", {
                 "selected_floor_index": floor_idx,
                 "floor_name": selected_floor.name
@@ -597,11 +611,24 @@ class Controller:
         if self.selected_floor_index > 0:
             self._send_onion_skin_preview()
 
+    #def handle_modifier_the_maxflow_request(self,data):
+
+
     def handle_tool_selected_request(self, data):
         """
         when user click the botton of outils
         """
         tool = data.get("tool")
+
+        if tool == 'plenum' and self.the_plenum is not None:
+             ivy_bus.publish("show_alert_request", {
+                 "title": "Plenum Existant",
+                 "message": "Un seul plenum peut être créé dans l'application."
+             })
+
+             ivy_bus.publish("tool_selected_update", {"tool": 'select'})
+             self.current_tool = 'select'
+             return
 
         if self.selected_floor_index is None:
             ivy_bus.publish("show_alert_request",{
@@ -616,6 +643,8 @@ class Controller:
         ivy_bus.publish("tool_selected_update", {
             "tool": tool
         })
+
+
 
     def handle_rename_floor_request(self,data):
         """
@@ -674,6 +703,8 @@ class Controller:
             floor.vents   = [v for v in floor.vents   if not same_segment(v)]
             # Send update for ventilation summary if a vent was deleted
             self.handle_get_ventilation_summary_request({})
+        elif obj_type == "plenum":
+            self.the_plenum = None
 
         # Always refresh the onion skin display after deletion
         # This will ensure the onion skin is correctly updated
@@ -750,6 +781,102 @@ class Controller:
     def handle_onion_skin_preview_request(self, data):
         """Handle request for onion skin preview of the floor below"""
         self._send_onion_skin_preview()
+
+    def handle_create_plenum_request(self, data):
+        start_x = data["start_x"]
+        start_y = data["start_y"]
+        end_x   = data["end_x"]
+        end_y   = data["end_y"]
+
+        if self.the_plenum:
+            ivy_bus.publish("show_alert_request", {
+                "title": "Plenum Existant",
+                "message": "Un seul plenum peut être créé dans l'application. L'opération a été annulée." 
+            })
+            return
+        
+        self.the_plenum = True
+            
+        if self.selected_floor_index is None:
+            return
+        
+        max_flow = None
+        try:
+            max_flow_str = simpledialog.askstring(
+                "Débit Maximal du Plenum",
+                "Entrez le débit maximal (m3/h) pour ce plenum:",
+                initialvalue="1000"
+            )
+
+            if max_flow_str:
+                try:
+                    max_flow_val = int(max_flow_str)
+                    if max_flow_val >= 0:
+                        max_flow = max_flow_val
+                        print(f"[Controller] User provided max_flow: {max_flow}")
+                    else:
+                        ivy_bus.publish("show_alert_request", {"title": "Entrée invalide", "message": "Le débit doit être un nombre positif."})
+                        return
+                except ValueError:
+                     ivy_bus.publish("show_alert_request", {"title": "Entrée invalide", "message": "Veuillez entrer un nombre entier valide."})
+                     return
+            else:
+                 print("[Controller] Plenum creation cancelled by user during flow input.")
+                 return
+
+        except Exception as e:
+             print(f"[Controller] Error showing simpledialog or processing input: {e}")
+             return
+
+        plenum_type = None
+        if max_flow is not None:
+            try:
+                type_str = simpledialog.askstring(
+                    "Type de Plenum",
+                    "Entrez le type de plenum (ex: simple, double):",
+                )
+
+                if type_str:
+                    plenum_type = type_str
+                    print(f"[Controller] User provided type: {plenum_type}")
+                else:
+
+                    plenum_type = None
+                    print("[Controller] User did not provide a type or cancelled.")
+
+            except Exception as e:
+                 print(f"[Controller] Error showing type simpledialog: {e}")
+                 plenum_type = None
+
+        if max_flow is not None: 
+            print("[Controller] Creating the single plenum object...")
+            start_coords = (start_x, start_y)
+            end_coords = (end_x, end_y)
+
+            plenum_obj = Plenum(start_coords, end_coords, max_flow=max_flow) 
+            plenum_obj.type = plenum_type
+            plenum_obj.floor_index = self.selected_floor_index
+
+            self.the_plenum = plenum_obj 
+            
+            print(f"[Controller] Created the single plenum object on floor {plenum_obj.floor_index}: {plenum_obj} with Type: {plenum_obj.type}")
+            
+            current_floor = self.floors[self.selected_floor_index] 
+            if not hasattr(current_floor, "plenums"):
+                 current_floor.plenums = []
+            current_floor.plenums.append(plenum_obj)
+
+            ivy_bus.publish("draw_plenum_update", {
+                "start": plenum_obj.start,
+                "end": plenum_obj.end,
+                "max_flow": plenum_obj.max_flow,
+                "type": plenum_obj.type
+            })
+
+            ivy_bus.publish("disable_tool_button", {"tool": "plenum"})
+        
+        else:
+             print("[Controller] Failed to get valid max_flow, plenum not created.")
 
     def _send_onion_skin_preview(self):
         """Send data for onion skin preview of the floor below current floor"""
@@ -857,6 +984,7 @@ class Controller:
             return
 
         new_floors = []
+        plenum_found_in_import = False
         for f_dict in floors_data:
             floor_obj = Floor(f_dict.get("name", "Etage ?"))
             floor_obj.height = f_dict.get("height", 2.5)
@@ -903,6 +1031,16 @@ class Controller:
                         v.get("name", ""), v.get("diameter", ""),
                         flow_rate, function, color)
                 )
+            
+            if "plenums" in f_dict: 
+                 if not hasattr(floor_obj, 'plenums'): floor_obj.plenums = [] 
+                 for p_data in f_dict["plenums"]:
+                     try:
+                         plenum_instance = Plenum.from_dict(p_data) 
+                         floor_obj.add_plenum(plenum_instance) 
+                         plenum_found_in_import = True 
+                     except Exception as e_plenum:
+                         print(f"Error loading plenum data {p_data}: {e_plenum}") 
 
             new_floors.append(floor_obj)
 
@@ -915,6 +1053,15 @@ class Controller:
 
         self.floors = new_floors
         self.selected_floor_index = 0
+
+        if plenum_found_in_import:
+            self.the_plenum = True # **恢复你的布尔标记**
+            print("[Controller] Plenum(s) found in import. Setting flag and disabling button.")
+            ivy_bus.publish("disable_tool_button", {"tool": "plenum"}) # **禁用按钮**
+        else:
+            self.the_plenum = None # **重置标记为 None**
+            print("[Controller] No plenums found in import. Resetting flag and enabling button.")
+            ivy_bus.publish("enable_tool_button", {"tool": "plenum"}) # **启用按钮**
 
         ivy_bus.publish("clear_canvas_update", {})
 

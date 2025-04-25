@@ -72,6 +72,8 @@ class GraphicalView(tk.Tk):
         self.placement_tooltip_text = StringVar(self)
         self.placement_element_type = None
 
+        self.text_id = None
+
         self.colors = {
             "topbar_bg": "white",  # White top bar
             "main_bg": "#f5f7fa",  # Light gray for main background
@@ -109,6 +111,8 @@ class GraphicalView(tk.Tk):
         ivy_bus.subscribe("clear_canvas_update",      self.on_clear_canvas_update)
         ivy_bus.subscribe("ventilation_summary_update", self.populate_ventilation_summary)
         ivy_bus.subscribe("ensure_onion_skin_refresh", self.on_ensure_onion_skin_refresh)
+        ivy_bus.subscribe("draw_plenum_update",         self.on_draw_plenum_update)
+
 
         # Set initial cursor
         self.current_tool = 'select'  # Default tool
@@ -151,6 +155,7 @@ class GraphicalView(tk.Tk):
             'window': os.path.join(base_path, 'photos', 'window.png'),
             'door':   os.path.join(base_path, 'photos', 'door.png'),
             'vent':   os.path.join(base_path, 'photos', 'fan.png'),
+            'plenum': os.path.join(base_path, 'photos', 'plenum.png'),
             'save':   os.path.join(base_path, 'photos', 'diskette.png'),
             'import': os.path.join(base_path, 'photos', 'import.png'),
             'document': os.path.join(base_path, 'photos', 'document.png'),
@@ -414,6 +419,7 @@ class GraphicalView(tk.Tk):
         self.canvas.bind("<Button-3>", self.on_canvas_right_click)
         self.canvas.bind("<Motion>",   self.on_canvas_move)
         self.canvas.bind("<Leave>", self.on_canvas_leave)
+        self.canvas.bind("<ButtonRelease-1>", self.on_canvas_release)
 
         # Create compass layer
         self._create_compass_layer(drawWrap)
@@ -572,7 +578,8 @@ class GraphicalView(tk.Tk):
             ('wall', 'Mur'),
             ('window', 'Fenêtre'),
             ('door', 'Porte'),
-            ('vent', 'Ventilation')
+            ('vent', 'Ventilation'),
+            ('plenum','Plenum')
         ]
 
         # Create buttons with tooltips
@@ -698,6 +705,13 @@ class GraphicalView(tk.Tk):
                 "type": obj_type,
                 "coords": coords
             })
+            
+        if self.current_tool == "plenum":
+            self.plenum_start_x = self.canvas.canvasx(event.x)
+            self.plenum_start_y = self.canvas.canvasy(event.y)
+            self.temp_plenum = None
+
+        
 
     def on_canvas_move(self, event):
         # Convert window coordinates to canvas coordinates
@@ -745,6 +759,19 @@ class GraphicalView(tk.Tk):
             # Update placement tooltip position
             if self.placement_tooltip:
                 self.placement_tooltip.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 15}")
+        
+        if self.current_tool == "plenum" and hasattr(self, "plenum_start_x") and self.plenum_start_x is not None:
+            end_x = self.canvas.canvasx(event.x)
+            end_y = self.canvas.canvasy(event.y)
+
+            if self.temp_plenum:
+                self.canvas.delete(self.temp_plenum)
+
+            self.temp_plenum = self.canvas.create_rectangle(
+                self.plenum_start_x, self.plenum_start_y,
+                end_x, end_y,
+                outline="blue", dash=(4, 2), width=2, tags=("plenum_preview",)
+            )
 
         self._handle_hover(event)
 
@@ -765,6 +792,25 @@ class GraphicalView(tk.Tk):
         if self.current_tool == "vent":
             ivy_bus.publish("cancal_to_draw_vent_request", {})
             self._hide_placement_tooltip()
+
+    def on_canvas_release(self, event):
+        if self.current_tool == "plenum" and hasattr(self, "plenum_start_x") and self.plenum_start_x is not None:
+            end_x = self.canvas.canvasx(event.x)
+            end_y = self.canvas.canvasy(event.y)
+
+            if self.temp_plenum:
+                self.canvas.delete(self.temp_plenum)
+                self.temp_plenum = None
+
+            ivy_bus.publish("create_plenum_request", {
+                "start_x": self.plenum_start_x,
+                "start_y": self.plenum_start_y,
+                "end_x": end_x,
+                "end_y": end_y
+            })
+
+            self.plenum_start_x = None
+            self.plenum_start_y = None
 
     def on_new_floor_button_click(self):
         ivy_bus.publish("new_floor_request", {})
@@ -1441,6 +1487,14 @@ class GraphicalView(tk.Tk):
                     500,  # Use a shorter delay for wall tooltips (500ms instead of 1000ms)
                     lambda: self.tooltip.show(tooltip_text, x_root, y_root)
                 )
+            elif item_type =='plenum':
+                tooltip_text_to_show = meta_data.get('tooltip_text') 
+                if tooltip_text_to_show:
+                    self.hover_after_id = self.after(
+                        500,
+                        lambda text=tooltip_text_to_show: self.tooltip.show(text, x_root + 10, y_root + 10) 
+                    )
+
             else:
                 # Create a dedicated tooltip for vents if it doesn't exist
                 if item not in self.vent_tooltips:
@@ -1488,7 +1542,26 @@ class GraphicalView(tk.Tk):
             if hover_item:
                 self._schedule_hover(hover_item, event.x_root + 10, event.y_root + 10)
             else:
-                self._cancel_hover()
+                plenum_hover_found = False
+                plenum_items = self.canvas.find_withtag("plenum") 
+                for item_id in plenum_items:
+                     try:
+                         coords = self.canvas.coords(item_id)
+                         if len(coords) == 4:
+                             x1 = min(coords[0], coords[2])
+                             y1 = min(coords[1], coords[3])
+                             x2 = max(coords[0], coords[2])
+                             y2 = max(coords[1], coords[3])
+
+                             if x1 <= canvas_x <= x2 and y1 <= canvas_y <= y2:
+                                 self._schedule_hover(item_id, event.x_root + 10, event.y_root + 10)
+                                 plenum_hover_found = True 
+                                 break
+                     except Exception as e_coords:
+                          print(f"Error getting coords for plenum item {item_id}: {e_coords}")
+                          continue 
+                if not plenum_hover_found:
+                    self._cancel_hover()
         except Exception as e:
             # Handle any errors that might occur during hover detection
             print(f"Error handling hover: {e}")
@@ -1830,6 +1903,37 @@ class GraphicalView(tk.Tk):
         # Request ventilation data from the controller AFTER setting up the handler
         print("[View] Requesting ventilation summary data")
         ivy_bus.publish("get_ventilation_summary_request", {})
+
+    def on_draw_plenum_update(self, data):
+        """
+        data = {
+            "start": (x1, y1),
+            "end": (x2, y2),
+            "max_flow": 1000
+        }
+        """
+        start = data.get("start")
+        end = data.get("end")
+        max_flow = data.get("max_flow")
+        plenum_type = data.get("type")
+
+        drawn_rect_id =self.canvas.create_rectangle(
+            start[0], start[1], end[0], end[1],
+            outline="blue", fill="", width=3, tags=("plenum",)
+        )
+
+        tooltip_text = f"Plenum\nType: {plenum_type if plenum_type else 'N/A'}\nDébit Max: {max_flow} m3/h"
+        self.canvas_item_meta[drawn_rect_id] = {
+            "type": "plenum",
+            "max_flow": max_flow,
+            "plenum_type": plenum_type, 
+            "tooltip_text": tooltip_text
+        }
+
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        self._ensure_onion_skin_below()
+
+
 
     def _handle_summary_window_close(self, summary_window):
         """Handle cleanup when summary window is closed"""

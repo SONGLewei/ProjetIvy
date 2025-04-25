@@ -7,6 +7,7 @@ class Floor:
         self.windows = []
         self.vents = []
         self.height = 2.5
+        self.plenums = []
 
     def add_wall(self, wall):
         self.walls.append(wall)
@@ -26,12 +27,16 @@ class Floor:
     def set_height(self, value: float):
         self.height = value
 
+    def add_plenum(self, plenum):
+        self.plenums.append(plenum)
+
     def __repr__(self):
         return (f"<Floor '{self.name}' | "
                 f"{len(self.walls)} walls, "
                 f"{len(self.doors)} doors, "
                 f"{len(self.windows)} windows, "
-                f"{len(self.vents)} vents>")
+                f"{len(self.vents)} vents, "
+                f"{len(self.plenums)} plenums>")
 
     def to_dict(self):
         return {
@@ -40,6 +45,7 @@ class Floor:
             "walls":   [w.to_dict() for w in self.walls],
             "windows": [w.to_dict() for w in self.windows],
             "doors":   [d.to_dict() for d in self.doors],
-            "vents":   [v.to_dict() for v in self.vents]
+            "vents":   [v.to_dict() for v in self.vents],
+            "plenums": [p.to_dict() for p in self.plenums]
         }
 
