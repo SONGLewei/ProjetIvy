@@ -575,10 +575,15 @@ class GraphicalView(tk.Tk):
         toolbarFrame = tk.Frame(self, bg=self.colors["toolbar_bg"])
         toolbarFrame.pack(side=tk.BOTTOM, fill=tk.X)  # Increased bottom margin to 20px
 
-        leftSpace = tk.Label(toolbarFrame, bg=self.colors["toolbar_bg"])
+        # Create a centered container for tool buttons
+        centerContainer = tk.Frame(toolbarFrame, bg=self.colors["toolbar_bg"])
+        centerContainer.pack(side=tk.TOP, fill=tk.X)
+        
+        # Use empty frames on left and right to center the icon frame
+        leftSpace = tk.Frame(centerContainer, bg=self.colors["toolbar_bg"])
         leftSpace.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        iconFrame = tk.Frame(toolbarFrame, bg=self.colors["toolbar_bg"])
+        iconFrame = tk.Frame(centerContainer, bg=self.colors["toolbar_bg"])
         iconFrame.pack(side=tk.LEFT, pady=10)  # Add vertical padding to the icon frame
 
         # Tool names in French (direct constant strings for better reliability)
@@ -639,9 +644,72 @@ class GraphicalView(tk.Tk):
 
             # Store tooltip reference to prevent garbage collection
             self.tooltips.append(tooltip)
-
-        rightSpace = tk.Label(toolbarFrame, bg=self.colors["toolbar_bg"])
+            
+        rightSpace = tk.Frame(centerContainer, bg=self.colors["toolbar_bg"])
         rightSpace.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Create a single row of color legends below the buttons - with dark gray background
+        legendFrame = tk.Frame(toolbarFrame, bg="#e0e0e0")
+        legendFrame.pack(side=tk.BOTTOM, fill=tk.X, pady=0)
+        
+        # Define the colors and labels for ventilation and plenums
+        color_legends = [
+            {"label": "Mur", "color": "#000000"},  # Black - Wall
+            {"label": "Fenêtre", "color": "#ffafcc"},  # Pink - Window
+            {"label": "Porte", "color": "#dda15e"},  # Dark orange - Door
+            {"label": "Extract. air vicié", "color": "#ff0000"},  # Red
+            {"label": "Insuff. air neuf", "color": "#ff9900"},  # Orange
+            {"label": "Extract. extérieur", "color": "#4c7093"},  # Dark blue
+            {"label": "Admis. air ext.", "color": "#66ccff"},  # Light blue
+            {"label": "Plenum Simple flux", "color": "#4CAF50"},  # Green
+            {"label": "Plenum Double flux", "color": "#9C27B0"}   # Purple
+        ]
+        
+        # Create centered container for the color legends
+        legendContainer = tk.Frame(legendFrame, bg="#e0e0e0")
+        legendContainer.pack(side=tk.TOP, fill=tk.X, pady=5, anchor="center")
+        
+        # Create a spacer on the left to help center the legends
+        tk.Frame(legendContainer, bg="#e0e0e0", width=20).pack(side=tk.LEFT)
+        
+        # Add a expanding spacer on the left to help center the legends
+        leftSpacer = tk.Frame(legendContainer, bg="#e0e0e0")
+        leftSpacer.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Create a container for the actual color labels to group them together
+        labelsContainer = tk.Frame(legendContainer, bg="#e0e0e0")
+        labelsContainer.pack(side=tk.LEFT)
+        
+        # Create color legend items in a single row
+        for legend in color_legends:
+            # Create a frame for each legend item (color box + label)
+            legend_item = tk.Frame(labelsContainer, bg="#e0e0e0")
+            legend_item.pack(side=tk.LEFT, padx=15, pady=5)
+            
+            # Color indicator
+            color_box = tk.Canvas(
+                legend_item,
+                width=16,
+                height=16,
+                bg=legend["color"],
+                highlightthickness=1,
+                highlightbackground="#999999"
+            )
+            color_box.pack(side=tk.LEFT, padx=(0, 5))
+            
+            # Label with the same color as the box
+            label = tk.Label(
+                legend_item,
+                text=legend["label"],
+                bg="#e0e0e0",
+                fg=legend["color"],  # Match text color to box color
+                font=("Helvetica", 12, "bold")  # Make text bigger and bold
+            )
+            label.pack(side=tk.LEFT)
+            
+        # Add a expanding spacer on the right to balance the centering
+        rightSpacer = tk.Frame(legendContainer, bg="#e0e0e0")
+        rightSpacer.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     # --------------------------------- Handle events ------------------------------------------------
     def on_canvas_left_click(self, event):
