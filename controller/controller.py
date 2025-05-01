@@ -436,12 +436,14 @@ class Controller:
             return
 
         if is_click and self.vent_start_point is None:
+            # First click sets the center of the circle
             self.vent_start_point = (x, y)
             self.vent_role  = role
             self.vent_color = color
             return
 
         if is_click and self.vent_start_point is not None:
+            # Second click determines the radius
             start, end = self.vent_start_point, (x, y)
             temp = Vent(start, end, "", "", "", role, color)
 
@@ -464,6 +466,7 @@ class Controller:
             return
 
         if is_preview and self.vent_start_point:
+            # Preview the circle as the mouse moves
             temp = Vent(self.vent_start_point, (x, y), "", "", "", role, color)
             ivy_bus.publish("draw_vent_update", {
                 "start": temp.start, "end": temp.end,
@@ -709,45 +712,83 @@ class Controller:
         coords = data.get("coords")
         print(f"[Controller] Deleting {obj_type} with coords {coords}")
         
-        # For vents, the coordinates might have more values due to arrow shape
-        # Just extract the start and end points we need for comparison
-        if obj_type == "vent" and len(coords) > 4:
-            # For vents with complex shapes, take just the first 4 coordinates
-            x1, y1, x2, y2 = coords[0], coords[1], coords[2], coords[3]
-        else:
-            # For regular items like walls, windows, and doors
-            x1, y1, x2, y2 = map(int, coords)
-            
-        start = (x1, y1)
-        end   = (x2, y2)
-
         floor = self.floors[self.selected_floor_index]
-
-        def same_segment(o):
-            return ({o.start, o.end} == {start, end})
-
-        if obj_type == "wall":
-            floor.walls   = [w for w in floor.walls   if not same_segment(w)]
-        elif obj_type == "window":
-            floor.windows = [w for w in floor.windows if not same_segment(w)]
-        elif obj_type == "door":
-            floor.doors   = [d for d in floor.doors   if not same_segment(d)]
-        elif obj_type == "vent":
-            # Delete the vent
-            floor.vents   = [v for v in floor.vents   if not same_segment(v)]
-            # Send update for ventilation summary if a vent was deleted
-            self.handle_get_ventilation_summary_request({})
-        elif obj_type == "plenum":
-            # Delete the plenum from both the controller reference and the floor's plenums list
-            self.the_plenum = None
-            if hasattr(floor, "plenums"):
-                # Match plenum by coordinates (start and end)
-                floor.plenums = [p for p in floor.plenums if not same_segment(p)]
-                print(f"[Controller] Deleted plenum, remaining: {len(floor.plenums)}")
+        
+        if obj_type == "vent":
+            # For circular vents, the coordinates are [left, top, right, bottom]
+            # We need to convert these to center and radius points
+            if len(coords) == 4:
+                left, top, right, bottom = map(float, coords)
+                # Calculate center point
+                center_x = (left + right) / 2
+                center_y = (top + bottom) / 2
+                # Calculate a point on the edge (representing the end point)
+                radius = (right - left) / 2
+                edge_x = center_x + radius
+                edge_y = center_y
                 
-                # Re-enable the plenum button when a plenum is deleted
-                if len(floor.plenums) == 0:
-                    ivy_bus.publish("enable_tool_button", {"tool": "plenum"})
+                # These are the points we'll use to identify the vent
+                start = (center_x, center_y)
+                end = (edge_x, edge_y)
+                
+                # Find the vent to delete by checking if it's close to these points
+                vents_to_delete = []
+                for i, vent in enumerate(floor.vents):
+                    # Calculate center distance
+                    dx = vent.start[0] - start[0]
+                    dy = vent.start[1] - start[1]
+                    distance = math.sqrt(dx*dx + dy*dy)
+                    
+                    # If center is within 10 pixels, consider it a match
+                    if distance <= 10:
+                        vents_to_delete.append(i)
+                
+                # Delete identified vents (in reverse order to avoid index issues)
+                for i in sorted(vents_to_delete, reverse=True):
+                    print(f"[Controller] Deleting vent at index {i} with start {floor.vents[i].start}")
+                    del floor.vents[i]
+                
+                # Send update for ventilation summary if a vent was deleted
+                if vents_to_delete:
+                    self.handle_get_ventilation_summary_request({})
+            else:
+                # For backwards compatibility with older code that might send start/end points
+                x1, y1, x2, y2 = map(float, coords[:4])
+                start = (x1, y1)
+                end = (x2, y2)
+                
+                def same_segment(o):
+                    return ({o.start, o.end} == {start, end})
+                
+                floor.vents = [v for v in floor.vents if not same_segment(v)]
+                self.handle_get_ventilation_summary_request({})
+        else:
+            # For walls, windows, doors, plenums - use the original method
+            if len(coords) >= 4:
+                x1, y1, x2, y2 = map(float, coords[:4])
+                start = (x1, y1)
+                end = (x2, y2)
+                
+                def same_segment(o):
+                    return ({o.start, o.end} == {start, end})
+
+                if obj_type == "wall":
+                    floor.walls = [w for w in floor.walls if not same_segment(w)]
+                elif obj_type == "window":
+                    floor.windows = [w for w in floor.windows if not same_segment(w)]
+                elif obj_type == "door":
+                    floor.doors = [d for d in floor.doors if not same_segment(d)]
+                elif obj_type == "plenum":
+                    # Delete the plenum from both the controller reference and the floor's plenums list
+                    self.the_plenum = None
+                    if hasattr(floor, "plenums"):
+                        # Match plenum by coordinates (start and end)
+                        floor.plenums = [p for p in floor.plenums if not same_segment(p)]
+                        print(f"[Controller] Deleted plenum, remaining: {len(floor.plenums)}")
+                        
+                        # Re-enable the plenum button when a plenum is deleted
+                        if len(floor.plenums) == 0:
+                            ivy_bus.publish("enable_tool_button", {"tool": "plenum"})
 
         # Always refresh the onion skin display after deletion
         # This will ensure the onion skin is correctly updated

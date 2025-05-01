@@ -703,8 +703,20 @@ class GraphicalView(tk.Tk):
 
             obj_type = tags[0]
             coords = self.canvas.coords(item)
+            
+            # For vents, we need to clean up any associated metadata
+            if obj_type == "vent" and item in self.canvas_item_meta:
+                # Remove from metadata dictionary
+                if item in self.canvas_item_meta:
+                    del self.canvas_item_meta[item]
+                # Remove from vent tooltips if present
+                if item in self.vent_tooltips:
+                    del self.vent_tooltips[item]
+            
+            # Delete the item
             self.canvas.delete(item)
 
+            # Notify controller about the deletion
             ivy_bus.publish("delete_item_request", {
                 "type": obj_type,
                 "coords": coords
@@ -1115,17 +1127,24 @@ class GraphicalView(tk.Tk):
         if color == "gray":
             if hasattr(self, "temp_vent"):
                 self.canvas.delete(self.temp_vent)
-            self.temp_vent = self.canvas.create_line(
-                start[0], start[1], end[0], end[1],
-                fill="gray", dash=(4, 2), width=4
+            
+            # Calculate the radius based on the distance between start and end points
+            import math
+            dx = end[0] - start[0]
+            dy = end[1] - start[1]
+            radius = math.sqrt(dx*dx + dy*dy)
+            
+            # Draw a circle with dashed outline
+            self.temp_vent = self.canvas.create_oval(
+                start[0] - radius, start[1] - radius,
+                start[0] + radius, start[1] + radius,
+                outline="gray", dash=(4, 2), width=2, fill=""
             )
             
-            # Calculate length for placement tooltip
+            # Calculate dimensions for placement tooltip
             if start != (0, 0) or end != (0, 0):  # Only update if not resetting
-                dx = end[0] - start[0]
-                dy = end[1] - start[1]
-                length_px = (dx**2 + dy**2)**0.5
-                length_m = length_px * (2.0/40.0)  # Convert to meters based on scale
+                # Convert dimensions to meters based on scale (40px = 2m)
+                diameter_m = radius * 2 * (2.0/40.0)  # Convert to meters based on scale
                 
                 # Get the correct vent type name
                 vent_type = "Ventilation"
@@ -1139,7 +1158,9 @@ class GraphicalView(tk.Tk):
                     if self.vent_role in role_map:
                         vent_type = role_map[self.vent_role]
                 
-                self._show_placement_tooltip(vent_type, length_m)
+                # Show dimensions instead of length
+                dimension = f"{diameter_m:.2f}x{diameter_m:.2f}"
+                self._show_placement_tooltip(vent_type, dimension, is_dimension=True)
 
         else:
             if hasattr(self, "temp_vent"):
@@ -1147,61 +1168,43 @@ class GraphicalView(tk.Tk):
                 del self.temp_vent
                 self._hide_placement_tooltip()  # Hide tooltip when placement is done
 
-            # Calculate line angle for the arrow
+            # Calculate the radius based on the distance between start and end points
             import math
             dx = end[0] - start[0]
             dy = end[1] - start[1]
-            length = math.sqrt(dx*dx + dy*dy)
+            radius = math.sqrt(dx*dx + dy*dy)
+            
+            # Create a hollow circle with the specified color
+            item = self.canvas.create_oval(
+                start[0] - radius, start[1] - radius,
+                start[0] + radius, start[1] + radius,
+                outline=color, width=2, fill="", tags=("vent",)
+            )
 
-            if length > 0:
-                dx, dy = dx/length, dy/length
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
-                # Create the base line (using width=2 to match the onion skin)
-                item = self.canvas.create_line(
-                    start[0], start[1], end[0], end[1],
-                    fill=color, width=2, tags=("vent",)
-                )
+            # Create well-formatted tooltip content with explicit strings
+            name = data.get('name', '')
+            diameter = data.get('diameter', '')
+            flow = data.get('flow', '')
+            role = data.get('role', '')
 
-                # Add arrowhead
-                arrow_size = 8
-                arrow_angle = 0.5  # in radians, determines arrow width
+            meta = f"{name}\nO {diameter} mm\n{flow} m3/h\n{role}"
 
-                # Calculate the arrowhead points
-                arrow_x1 = end[0] - arrow_size * (dx * math.cos(arrow_angle) - dy * math.sin(arrow_angle))
-                arrow_y1 = end[1] - arrow_size * (dy * math.cos(arrow_angle) + dx * math.sin(arrow_angle))
-                arrow_x2 = end[0] - arrow_size * (dx * math.cos(arrow_angle) + dy * math.sin(arrow_angle))
-                arrow_y2 = end[1] - arrow_size * (dy * math.cos(arrow_angle) - dx * math.sin(arrow_angle))
+            # Ensure meta data is not empty
+            if meta and meta.strip():
+                # Store both formatted text and individual components
+                self.canvas_item_meta[item] = {
+                    'text': meta,
+                    'name': name,
+                    'diameter': diameter,
+                    'flow': flow,
+                    'role': role,
+                    'type': 'vent'  # Add type field for consistency
+                }
 
-                # Create arrowhead with the same tag as the line
-                arrowhead = self.canvas.create_polygon(
-                    end[0], end[1], arrow_x1, arrow_y1, arrow_x2, arrow_y2,
-                    fill=color, outline=color, tags=("vent",)
-                )
-
-                self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-                # Create well-formatted tooltip content with explicit strings
-                name = data.get('name', '')
-                diameter = data.get('diameter', '')
-                flow = data.get('flow', '')
-                role = data.get('role', '')
-
-                meta = f"{name}\nO {diameter} mm\n{flow} m3/h\n{role}"
-
-                # Ensure meta data is not empty
-                if meta and meta.strip():
-                    # Store both formatted text and individual components
-                    self.canvas_item_meta[item] = {
-                        'text': meta,
-                        'name': name,
-                        'diameter': diameter,
-                        'flow': flow,
-                        'role': role,
-                        'type': 'vent'  # Add type field for consistency
-                    }
-
-                # Ensure all onion skin items remain below
-                self._ensure_onion_skin_below()
+            # Ensure all onion skin items remain below
+            self._ensure_onion_skin_below()
 
     def on_vent_need_info_request(self, data):
         start, end = data["start"], data["end"]
@@ -1946,7 +1949,7 @@ class GraphicalView(tk.Tk):
         # Create a callback handler for ventilation updates 
         def handle_ventilation_update(data):
             print("[View] Received ventilation summary update")
-            self.populate_ventilation_summary(summary_window, data)
+            self.populate_ventilation_summary(data=data, summary_window=summary_window)
         
         # Store the update handler reference so we can access it later to remove
         summary_window.ventilation_update_handler = handle_ventilation_update
@@ -2011,8 +2014,35 @@ class GraphicalView(tk.Tk):
             if hasattr(self, 'ventilation_summary_window'):
                 self.ventilation_summary_window = None
 
-    def populate_ventilation_summary(self, summary_window, data=None):
-        """Populate the ventilation summary window with data from all floors"""
+    def populate_ventilation_summary(self, data=None, summary_window=None):
+        """
+        Populate the ventilation summary window with data from all floors
+        
+        Can be called in two ways:
+        1. From ivy_bus subscriber: populate_ventilation_summary(self, data)
+        2. From window handler: populate_ventilation_summary(summary_window, data)
+        """
+        # Handle the case where it's called from ivy_bus subscriber
+        if summary_window is None and isinstance(data, dict):
+            # If we have an open ventilation summary window, use its handler instead
+            if hasattr(self, 'ventilation_summary_window') and self.ventilation_summary_window is not None:
+                try:
+                    if self.ventilation_summary_window.winfo_exists():
+                        if hasattr(self.ventilation_summary_window, 'ventilation_update_handler'):
+                            # Forward to the window's handler
+                            self.ventilation_summary_window.ventilation_update_handler(data)
+                            return
+                except Exception:
+                    # Window no longer exists, clear reference
+                    self.ventilation_summary_window = None
+            # If no window or error, just return silently
+            return
+            
+        # Handle the case where it's called from summary window's handler with (summary_window, data) params
+        if summary_window is None or not isinstance(summary_window, tk.Toplevel):
+            print("[View] Error: Invalid summary_window parameter")
+            return
+            
         if not hasattr(summary_window, "vent_data"):
             print("[View] Error: summary_window doesn't have vent_data attribute")
             return
@@ -2214,41 +2244,21 @@ class GraphicalView(tk.Tk):
             )
         elif item_type == "vent":
             start, end = coords
-            # Calculate the line angle for the arrow
+            # Calculate the radius based on the distance between start and end points
             import math
             dx = end[0] - start[0]
             dy = end[1] - start[1]
-            length = math.sqrt(dx*dx + dy*dy)
-
-            if length > 0:
-                dx, dy = dx/length, dy/length
-
-                # Create the base line (using width=2 to match the onion skin)
-                item_id = self.canvas.create_line(
-                    start[0], start[1], end[0], end[1],
-                    fill=opacity_color, width=2, tags=("onion_skin",)
-                )
-
-                # Store this onion skin item
-                self.onion_skin_items.append(item_id)
-
-                # Add arrowhead
-                arrow_size = 8
-                arrow_angle = 0.5  # in radians, determines arrow width
-
-                # Calculate the arrowhead points
-                arrow_x1 = end[0] - arrow_size * (dx * math.cos(arrow_angle) - dy * math.sin(arrow_angle))
-                arrow_y1 = end[1] - arrow_size * (dy * math.cos(arrow_angle) + dx * math.sin(arrow_angle))
-                arrow_x2 = end[0] - arrow_size * (dx * math.cos(arrow_angle) + dy * math.sin(arrow_angle))
-                arrow_y2 = end[1] - arrow_size * (dy * math.cos(arrow_angle) - dx * math.sin(arrow_angle))
-
-                # Create arrowhead
-                arrowhead_id = self.canvas.create_polygon(
-                    end[0], end[1], arrow_x1, arrow_y1, arrow_x2, arrow_y2,
-                    fill=opacity_color, outline=opacity_color, tags=("onion_skin",)
-                )
-
-                self.onion_skin_items.append(arrowhead_id)
+            radius = math.sqrt(dx*dx + dy*dy)
+            
+            # Create a hollow circle with reduced opacity
+            item_id = self.canvas.create_oval(
+                start[0] - radius, start[1] - radius,
+                start[0] + radius, start[1] + radius,
+                outline=opacity_color, width=2, fill="", tags=("onion_skin",)
+            )
+            
+            # Store this onion skin item
+            self.onion_skin_items.append(item_id)
         elif item_type == "plenum":
             start, end = coords
             # Create the rectangle for plenum with reduced opacity
@@ -2392,8 +2402,8 @@ class GraphicalView(tk.Tk):
             ivy_bus.publish("reset_app_request", {})
             
     # Placement tooltip methods
-    def _show_placement_tooltip(self, element_type, length_m):
-        """Show or update the placement tooltip with element type and length"""
+    def _show_placement_tooltip(self, element_type, length_m, is_dimension=False):
+        """Show or update the placement tooltip with element type and length or dimensions"""
         if not self.placement_tooltip:
             # Create the tooltip window
             self.placement_tooltip = Toplevel(self)
@@ -2417,7 +2427,13 @@ class GraphicalView(tk.Tk):
         
         # Update text and element type
         self.placement_element_type = element_type
-        tooltip_text = f"{element_type}: {length_m:.2f} m"
+        
+        # Display dimensions or length based on the flag
+        if is_dimension:
+            tooltip_text = f"{element_type}: {length_m} m²"
+        else:
+            tooltip_text = f"{element_type}: {length_m:.2f} m"
+            
         self.placement_tooltip_text.set(tooltip_text)
         
         # Force update to ensure tooltip appears correctly
