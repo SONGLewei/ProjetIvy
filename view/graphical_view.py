@@ -788,6 +788,25 @@ class GraphicalView(tk.Tk):
                 end_x, end_y,
                 outline="blue", dash=(4, 2), width=2, tags=("plenum_preview",)
             )
+            
+            # Calculate the plenum area for placement tooltip
+            width_px = abs(end_x - self.plenum_start_x)
+            height_px = abs(end_y - self.plenum_start_y)
+            
+            # Convert to square meters based on scale (40px = 2m)
+            width_m = width_px * (2.0/40.0)
+            height_m = height_px * (2.0/40.0)
+            area_m2 = width_m * height_m
+            
+            # Format area to display exactly 2 decimal places
+            formatted_area = f"{area_m2:.2f}"
+            
+            # Show area in placement tooltip
+            self._show_placement_tooltip("Plenum", formatted_area, is_dimension=True)
+            
+            # Update placement tooltip position
+            if self.placement_tooltip:
+                self.placement_tooltip.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 15}")
 
         self._handle_hover(event)
 
@@ -829,6 +848,9 @@ class GraphicalView(tk.Tk):
             if self.temp_plenum:
                 self.canvas.delete(self.temp_plenum)
                 self.temp_plenum = None
+                
+            # Hide placement tooltip
+            self._hide_placement_tooltip()
 
             ivy_bus.publish("create_plenum_request", {
                 "start_x": self.plenum_start_x,
@@ -1971,13 +1993,28 @@ class GraphicalView(tk.Tk):
             "start": (x1, y1),
             "end": (x2, y2),
             "max_flow": 1000,
-            "type": "Simple" or "Double"
+            "type": "Simple" or "Double",
+            "area": calculated area in m²
         }
         """
         start = data.get("start")
         end = data.get("end")
         max_flow = data.get("max_flow")
         plenum_type = data.get("type")
+        
+        # Calculate area if not provided
+        area = data.get("area")
+        if area is None:
+            # Calculate width and height in pixels
+            width_px = abs(end[0] - start[0])
+            height_px = abs(end[1] - start[1])
+            
+            # Convert to meters based on scale (40px = 2m)
+            width_m = width_px * (2.0/40.0)
+            height_m = height_px * (2.0/40.0)
+            
+            # Calculate area in square meters with 2 decimal places
+            area = round(width_m * height_m, 2)
         
         # Choose color based on plenum type
         plenum_color = "blue"  # Default color
@@ -1992,12 +2029,13 @@ class GraphicalView(tk.Tk):
             outline=plenum_color, fill="", width=3, tags=("plenum",)
         )
 
-        tooltip_text = f"Plenum\nType: {plenum_type if plenum_type else 'N/A'}\nDébit Max: {max_flow} m3/h"
+        tooltip_text = f"Plenum\nType: {plenum_type if plenum_type else 'N/A'}\nDébit Max: {max_flow} m3/h\nSuperficie: {area} m²"
         self.canvas_item_meta[drawn_rect_id] = {
             "type": "plenum",
             "max_flow": max_flow,
             "plenum_type": plenum_type, 
             "plenum_color": plenum_color,
+            "area": area,
             "tooltip_text": tooltip_text
         }
 

@@ -242,7 +242,8 @@ class Controller:
                             "start": plenum.start,
                             "end": plenum.end,
                             "max_flow": plenum.max_flow,
-                            "type": plenum.type
+                            "type": plenum.type,
+                            "area": plenum.area
                         })
 
                 self.window_start_point = None
@@ -377,7 +378,8 @@ class Controller:
                             "start": plenum.start,
                             "end": plenum.end,
                             "max_flow": plenum.max_flow,
-                            "type": plenum.type
+                            "type": plenum.type,
+                            "area": plenum.area
                         })
 
                 self.door_start_point = None
@@ -596,7 +598,8 @@ class Controller:
                     "start": p.start,
                     "end": p.end,
                     "max_flow": p.max_flow,
-                    "type": p.type
+                    "type": p.type,
+                    "area": p.area
                 })
 
             ivy_bus.publish("floor_selected_update", {
@@ -1050,7 +1053,8 @@ class Controller:
                 "start": plenum_obj.start,
                 "end": plenum_obj.end,
                 "max_flow": plenum_obj.max_flow,
-                "type": plenum_obj.type
+                "type": plenum_obj.type,
+                "area": plenum_obj.area
             })
 
             # Disable the plenum button
@@ -1131,7 +1135,8 @@ class Controller:
                     "fill": "blue",
                     "additional_data": {
                         "max_flow": plenum.max_flow,
-                        "type": plenum.type
+                        "type": plenum.type,
+                        "area": plenum.area
                     }
                 })
 
