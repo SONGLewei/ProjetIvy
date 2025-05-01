@@ -920,20 +920,110 @@ class Controller:
         plenum_type = None
         if max_flow is not None:
             try:
-                type_str = simpledialog.askstring(
-                    "Type de Plenum",
-                    "Entrez le type de plenum (ex: simple, double):",
-                )
+                # Create a custom dialog for plenum type selection
+                from tkinter import Toplevel, StringVar, Label, Button
 
-                if type_str:
-                    plenum_type = type_str
-                    print(f"[Controller] User provided type: {plenum_type}")
+                def get_plenum_type():
+                    # Create a custom dialog for type selection
+                    dialog = Toplevel()
+                    dialog.title("Type de Plenum")
+                    # Don't set fixed size to allow proper sizing based on content
+                    dialog.resizable(False, False)
+                    dialog.grab_set()  # Make it modal
+                    
+                    # Add styling with ttk
+                    from tkinter import ttk
+                    style = ttk.Style()
+                    
+                    # Configure style for better appearance on macOS
+                    if 'darwin' in os.sys.platform:
+                        style.configure('TLabel', font=('Helvetica', 13))
+                        style.configure('TButton', font=('Helvetica', 12))
+                        style.configure('TCombobox', font=('Helvetica', 12))
+                        style.configure('Header.TLabel', font=('Helvetica', 14, 'bold'))
+                    else:
+                        style.configure('TLabel', font=('Arial', 11))
+                        style.configure('TButton', font=('Arial', 11))
+                        style.configure('TCombobox', font=('Arial', 11))
+                        style.configure('Header.TLabel', font=('Arial', 13, 'bold'))
+                    
+                    # Configure the dialog background
+                    dialog.configure(background='#f0f0f0')
+                    
+                    # Create container frame with padding
+                    main_frame = ttk.Frame(dialog, padding=(20, 15, 20, 15))
+                    main_frame.pack(fill="both", expand=False)
+                    
+                    # Create header with title
+                    header = ttk.Label(main_frame, text="Type de Plenum", style='Header.TLabel')
+                    header.pack(pady=(0, 15), anchor="w")
+                    
+                    # Create label
+                    ttk.Label(main_frame, text="Choisissez le type de plenum:").pack(pady=(5, 8), anchor="w")
+                    
+                    # Create selection variable and set default
+                    selection = StringVar(dialog)
+                    selection.set("Simple")  # Default value
+                    
+                    # Create the option menu
+                    combo = ttk.Combobox(main_frame, textvariable=selection, values=["Simple", "Double"], state="readonly")
+                    combo.pack(pady=(0, 15), fill="x")
+                    
+                    # Result variable to store the selection
+                    result = {"value": None}
+                    
+                    # Button callbacks
+                    def on_ok():
+                        result["value"] = selection.get()
+                        dialog.destroy()
+                        
+                    def on_cancel():
+                        dialog.destroy()
+                    
+                    # Add a separator above buttons
+                    separator = ttk.Separator(main_frame, orient="horizontal")
+                    separator.pack(fill="x", pady=(5, 10))
+                    
+                    # Create buttons with better styling
+                    button_frame = ttk.Frame(main_frame)
+                    button_frame.pack(fill="x", pady=(0, 0))
+                    
+                    # Create buttons with consistent width
+                    ok_button = ttk.Button(button_frame, text="OK", command=on_ok, width=10)
+                    cancel_button = ttk.Button(button_frame, text="Annuler", command=on_cancel, width=10)
+                    
+                    # Position buttons
+                    cancel_button.pack(side="right", padx=(5, 0))
+                    ok_button.pack(side="right", padx=(5, 0))
+                    
+                    # Set initial focus to combobox
+                    combo.focus_set()
+                    
+                    # Update dialog size to fit content
+                    dialog.update_idletasks()
+                    dialog.geometry("")  # Reset geometry to fit content
+                    
+                    # Center the dialog on screen
+                    width = dialog.winfo_reqwidth()
+                    height = dialog.winfo_reqheight()
+                    x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+                    y = (dialog.winfo_screenheight() // 2) - (height // 2)
+                    dialog.geometry(f"{width}x{height}+{x}+{y}")
+                    
+                    # Wait for the dialog to close
+                    dialog.wait_window()
+                    return result["value"]
+                
+                # Show the dialog and get the selection
+                plenum_type = get_plenum_type()
+                if plenum_type:
+                    print(f"[Controller] User selected plenum type: {plenum_type}")
                 else:
                     plenum_type = None
-                    print("[Controller] User did not provide a type or cancelled.")
+                    print("[Controller] User did not select a plenum type or cancelled.")
 
             except Exception as e:
-                 print(f"[Controller] Error showing type simpledialog: {e}")
+                 print(f"[Controller] Error showing plenum type dialog: {e}")
                  plenum_type = None
 
         if max_flow is not None: 
