@@ -1970,17 +1970,26 @@ class GraphicalView(tk.Tk):
         data = {
             "start": (x1, y1),
             "end": (x2, y2),
-            "max_flow": 1000
+            "max_flow": 1000,
+            "type": "Simple" or "Double"
         }
         """
         start = data.get("start")
         end = data.get("end")
         max_flow = data.get("max_flow")
         plenum_type = data.get("type")
-
-        drawn_rect_id =self.canvas.create_rectangle(
+        
+        # Choose color based on plenum type
+        plenum_color = "blue"  # Default color
+        if plenum_type:
+            if plenum_type == "Simple":
+                plenum_color = "#4CAF50"  # Material Green
+            elif plenum_type == "Double":
+                plenum_color = "#9C27B0"  # Material Purple
+        
+        drawn_rect_id = self.canvas.create_rectangle(
             start[0], start[1], end[0], end[1],
-            outline="blue", fill="", width=3, tags=("plenum",)
+            outline=plenum_color, fill="", width=3, tags=("plenum",)
         )
 
         tooltip_text = f"Plenum\nType: {plenum_type if plenum_type else 'N/A'}\nDébit Max: {max_flow} m3/h"
@@ -1988,13 +1997,12 @@ class GraphicalView(tk.Tk):
             "type": "plenum",
             "max_flow": max_flow,
             "plenum_type": plenum_type, 
+            "plenum_color": plenum_color,
             "tooltip_text": tooltip_text
         }
 
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         self._ensure_onion_skin_below()
-
-
 
     def _handle_summary_window_close(self, summary_window):
         """Handle cleanup when summary window is closed"""
@@ -2261,9 +2269,23 @@ class GraphicalView(tk.Tk):
             self.onion_skin_items.append(item_id)
         elif item_type == "plenum":
             start, end = coords
+            # Get plenum type from additional data if available
+            plenum_type = None
+            if additional_data:
+                plenum_type = additional_data.get("type")
+            
+            # Choose color based on plenum type (same as in on_draw_plenum_update)
+            plenum_color = "blue"  # Default color
+            if plenum_type:
+                if plenum_type == "Simple":
+                    plenum_color = "#4CAF50"  # Material Green
+                elif plenum_type == "Double":
+                    plenum_color = "#9C27B0"  # Material Purple
+            
+            # Apply opacity to the color
+            plenum_color = self._apply_opacity_to_color(plenum_color, self.onion_skin_opacity)
+            
             # Create the rectangle for plenum with reduced opacity
-            # Use blue color (same as in main view) with opacity
-            plenum_color = self._apply_opacity_to_color("blue", self.onion_skin_opacity)
             item_id = self.canvas.create_rectangle(
                 start[0], start[1], end[0], end[1],
                 outline=plenum_color, width=3, fill="", tags=("onion_skin",)

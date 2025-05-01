@@ -1,78 +1,68 @@
 [
     {
-        "name": "rdc",
+        "name": "Etage 0",
         "height": 2.5,
         "walls": [
             {
                 "start": [
-                    351.0,
-                    268.0
+                    302.0,
+                    125.0
                 ],
                 "end": [
-                    671.0,
-                    268.0
+                    302.0,
+                    372.0
                 ]
             },
             {
                 "start": [
-                    353.0,
-                    403.0
+                    756.0,
+                    342.0
                 ],
                 "end": [
-                    667.0,
-                    403.0
+                    756.0,
+                    370.0
                 ]
             },
             {
                 "start": [
-                    353.0,
-                    268.0
+                    304.0,
+                    369.0
                 ],
                 "end": [
-                    353.0,
-                    309.0
+                    427.0,
+                    369.0
                 ]
             },
             {
                 "start": [
-                    353.0,
-                    349.0
+                    485.0,
+                    369.0
                 ],
                 "end": [
-                    353.0,
-                    406.0
+                    558.0,
+                    369.0
                 ]
             },
             {
                 "start": [
-                    664.0,
-                    268.0
+                    621.0,
+                    369.0
                 ],
                 "end": [
-                    664.0,
-                    296.0
-                ]
-            },
-            {
-                "start": [
-                    664.0,
-                    378.0
-                ],
-                "end": [
-                    664.0,
-                    403.0
+                    758.0,
+                    369.0
                 ]
             }
         ],
         "windows": [
             {
                 "start": [
-                    353.0,
-                    309.0
+                    427.0,
+                    369.0
                 ],
                 "end": [
-                    353.0,
-                    349.0
+                    485.0,
+                    369.0
                 ],
                 "thickness": 5
             }
@@ -80,103 +70,27 @@
         "doors": [
             {
                 "start": [
-                    664.0,
-                    296.0
+                    558.0,
+                    369.0
                 ],
                 "end": [
-                    664.0,
-                    378.0
+                    621.0,
+                    369.0
                 ]
             }
         ],
         "vents": [
             {
                 "start": [
-                    369.0,
-                    385.0
-                ],
-                "end": [
-                    369.0,
-                    397.0
-                ],
-                "name": "21",
-                "diameter": "12",
-                "flow_rate": "12",
-                "function": "extraction_externe",
-                "color": "#4c7093"
-            },
-            {
-                "start": [
-                    513.0,
-                    289.0
-                ],
-                "end": [
-                    513.0,
-                    300.0
-                ],
-                "name": "21",
-                "diameter": "12",
-                "flow_rate": "21",
-                "function": "admission_externe",
-                "color": "#66ccff"
-            }
-        ],
-        "plenums": [
-            {
-                "start": [
-                    372.0,
-                    284.0
-                ],
-                "end": [
-                    410.0,
-                    320.0
-                ],
-                "max_flow": 1000,
-                "type": "cvy"
-            }
-        ]
-    },
-    {
-        "name": "Etage 1",
-        "height": 12.0,
-        "walls": [
-            {
-                "start": [
-                    665.0,
-                    270.0
-                ],
-                "end": [
-                    665.0,
-                    400.0
-                ]
-            }
-        ],
-        "windows": [
-            {
-                "start": [
-                    512.0,
-                    269.0
+                    600.0,
+                    227.0
                 ],
                 "end": [
                     600.0,
-                    269.0
+                    242.0
                 ],
-                "thickness": 5
-            }
-        ],
-        "doors": [],
-        "vents": [
-            {
-                "start": [
-                    550.0,
-                    360.0
-                ],
-                "end": [
-                    550.0,
-                    382.0
-                ],
-                "name": "we",
-                "diameter": "3",
+                "name": "wq",
+                "diameter": "2",
                 "flow_rate": "2",
                 "function": "extraction_interne",
                 "color": "#ff0000"
@@ -185,116 +99,39 @@
         "plenums": [
             {
                 "start": [
-                    372.0,
-                    286.0
+                    361.0,
+                    201.0
                 ],
                 "end": [
-                    411.0,
-                    321.0
+                    402.0,
+                    242.0
                 ],
                 "max_flow": 1000,
-                "type": null
+                "type": "Simple"
             }
         ]
     },
     {
-        "name": "Etage 3",
+        "name": "Etage 1",
         "height": 2.5,
         "walls": [],
         "windows": [],
         "doors": [],
         "vents": [],
-        "plenums": []
-    },
-    {
-        "name": "Etage 4",
-        "height": 2.5,
-        "walls": [],
-        "windows": [],
-        "doors": [],
-        "vents": [],
-        "plenums": []
-    },
-    {
-        "name": "Etage 5",
-        "height": 2.5,
-        "walls": [],
-        "windows": [],
-        "doors": [],
-        "vents": [],
-        "plenums": []
-    },
-    {
-        "name": "Etage 6",
-        "height": 2.5,
-        "walls": [],
-        "windows": [],
-        "doors": [],
-        "vents": [],
-        "plenums": []
-    },
-    {
-        "name": "Etage 7",
-        "height": 2.5,
-        "walls": [],
-        "windows": [],
-        "doors": [],
-        "vents": [],
-        "plenums": []
-    },
-    {
-        "name": "Etage 8",
-        "height": 2.5,
-        "walls": [],
-        "windows": [],
-        "doors": [],
-        "vents": [],
-        "plenums": []
-    },
-    {
-        "name": "Etage 9",
-        "height": 2.5,
-        "walls": [],
-        "windows": [],
-        "doors": [],
-        "vents": [],
-        "plenums": []
-    },
-    {
-        "name": "Etage 10",
-        "height": 2.5,
-        "walls": [],
-        "windows": [],
-        "doors": [],
-        "vents": [],
-        "plenums": []
-    },
-    {
-        "name": "Etage 11",
-        "height": 2.5,
-        "walls": [],
-        "windows": [],
-        "doors": [],
-        "vents": [],
-        "plenums": []
-    },
-    {
-        "name": "Etage 12",
-        "height": 2.5,
-        "walls": [],
-        "windows": [],
-        "doors": [],
-        "vents": [],
-        "plenums": []
-    },
-    {
-        "name": "Etage 13",
-        "height": 2.5,
-        "walls": [],
-        "windows": [],
-        "doors": [],
-        "vents": [],
-        "plenums": []
+        "plenums": [
+            {
+                "start": [
+                    433.0,
+                    293.0
+                ],
+                "end": [
+                    476.0,
+                    335.0
+                ],
+                "max_flow": 1000,
+                "type": "Double"
+            }
+        ]
     },
     {
         "name": "Etage 2",

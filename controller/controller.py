@@ -595,7 +595,8 @@ class Controller:
                 ivy_bus.publish("draw_plenum_update", {
                     "start": p.start,
                     "end": p.end,
-                    "max_flow": p.max_flow
+                    "max_flow": p.max_flow,
+                    "type": p.type
                 })
 
             ivy_bus.publish("floor_selected_update", {
