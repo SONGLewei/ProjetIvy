@@ -1293,9 +1293,11 @@ class Controller:
     def handle_get_ventilation_summary_request(self, data):
         """Handle request for ventilation summary data from all floors"""
         all_vents_data = []
+        all_plenums_data = []
         
-        # Collect vents from all floors
+        # Collect vents and plenums from all floors
         for floor_idx, floor in enumerate(self.floors):
+            # Add vents
             for vent in floor.vents:
                 all_vents_data.append({
                     "floor_name": floor.name,
@@ -1306,13 +1308,24 @@ class Controller:
                     "function": vent.function,
                     "color": vent.color
                 })
+            
+            # Add plenums if present
+            if hasattr(floor, "plenums") and floor.plenums:
+                for plenum in floor.plenums:
+                    if hasattr(plenum, 'to_dict'):
+                        plenum_data = plenum.to_dict()
+                        plenum_data['floor_name'] = floor.name
+                        plenum_data['floor_index'] = floor_idx
+                        plenum_data['height'] = floor.height
+                        all_plenums_data.append(plenum_data)
         
         # Debug output to verify data
-        print(f"[Controller] Sending ventilation summary with {len(all_vents_data)} vents")
+        print(f"[Controller] Sending ventilation summary with {len(all_vents_data)} vents and {len(all_plenums_data)} plenums")
         
         # Send the combined data to the view
         ivy_bus.publish("ventilation_summary_update", {
-            "vents": all_vents_data
+            "vents": all_vents_data,
+            "plenums": all_plenums_data
         })
 
     def _check_wall_overlap(self, start, end, is_door=False, is_window=False):

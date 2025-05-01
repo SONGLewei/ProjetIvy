@@ -142,13 +142,19 @@ class GraphicalView(tk.Tk):
         self.after(100, lambda: self.attributes('-topmost', False))
 
     def _setup_style(self):
-        style = ttk.Style(self)
+        style = ttk.Style()
         style.theme_use("clam")
         style.configure("TButton", font=("Helvetica", 10), padding=6, foreground="black")
-        style.configure("FloorLabel.TLabel", font=("Arial", 13, "bold"), foreground="#333333", background="white")
+        style.configure("FloorLabel.TLabel", font=("Arial", 13, "bold"), foreground="#333339", background="white") 
         style.configure("Floor.TButton", font=("Helvetica", 11), padding=8)
         style.configure("SelectedFloor.TButton", font=("Helvetica", 11, "bold"), padding=8, background="#e8eeff")
-        style.map("SelectedFloor.TButton", background=[("active", "#d8e0ff")])
+        
+        # Configure a more visible scrollbar
+        style.configure("Visible.Vertical.TScrollbar", 
+                        background="#a0a0a0", 
+                        troughcolor="#f0f0f0", 
+                        arrowsize=16,
+                        width=16)
 
     def _load_icons(self):
         base_path = os.path.dirname(os.path.abspath(__file__))
@@ -1855,12 +1861,17 @@ class GraphicalView(tk.Tk):
         all_vents_tree.column("diameter", width=120)
         all_vents_tree.column("flow", width=120)
         
-        # Add scrollbar
-        all_vents_scrollbar = ttk.Scrollbar(all_vents_frame, orient=tk.VERTICAL, command=all_vents_tree.yview)
+        # Add scrollbar with enhanced visibility
+        all_vents_scrollbar = ttk.Scrollbar(all_vents_frame, orient=tk.VERTICAL, command=all_vents_tree.yview, style="Visible.Vertical.TScrollbar")
         all_vents_tree.configure(yscrollcommand=all_vents_scrollbar.set)
         
-        all_vents_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        all_vents_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        # Use grid instead of pack for better control of scrollbar visibility
+        all_vents_tree.grid(row=0, column=0, sticky="nsew")
+        all_vents_scrollbar.grid(row=0, column=1, sticky="ns")
+        
+        # Configure grid weights to make the treeview expand
+        all_vents_frame.columnconfigure(0, weight=1)
+        all_vents_frame.rowconfigure(0, weight=1)
         
         # Category tabs - one for each type of vent
         categories = {
@@ -1895,12 +1906,17 @@ class GraphicalView(tk.Tk):
             cat_tree.column("diameter", width=120)
             cat_tree.column("flow", width=120)
             
-            # Add scrollbar
-            cat_scrollbar = ttk.Scrollbar(category_frame, orient=tk.VERTICAL, command=cat_tree.yview)
+            # Add scrollbar with enhanced visibility
+            cat_scrollbar = ttk.Scrollbar(category_frame, orient=tk.VERTICAL, command=cat_tree.yview, style="Visible.Vertical.TScrollbar")
             cat_tree.configure(yscrollcommand=cat_scrollbar.set)
             
-            cat_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-            cat_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            # Use grid instead of pack for better scrollbar visibility
+            cat_tree.grid(row=0, column=0, sticky="nsew")
+            cat_scrollbar.grid(row=0, column=1, sticky="ns")
+            
+            # Configure grid weights
+            category_frame.columnconfigure(0, weight=1)
+            category_frame.rowconfigure(0, weight=1)
             
             # Store tree reference
             category_trees[category_id] = cat_tree
@@ -1909,46 +1925,150 @@ class GraphicalView(tk.Tk):
         summary_frame = ttk.Frame(notebook, padding=10)
         notebook.add(summary_frame, text="Récapitulatif")
         
-        # Create a frame for summary statistics
-        stats_frame = ttk.Frame(summary_frame, padding=10)
-        stats_frame.pack(fill=tk.BOTH, expand=True)
+        # Create a canvas with scrollbar for the summary content
+        summary_canvas = tk.Canvas(summary_frame, borderwidth=0, highlightthickness=0)
+        summary_scrollbar = ttk.Scrollbar(summary_frame, orient=tk.VERTICAL, command=summary_canvas.yview, 
+                                         style="Visible.Vertical.TScrollbar")
+        
+        # Store reference to canvas for later cleanup
+        summary_window.summary_canvas = summary_canvas
+        
+        # Container for all summary content
+        summary_content = ttk.Frame(summary_canvas, padding=5)
+        
+        # Configure the canvas
+        summary_canvas.configure(yscrollcommand=summary_scrollbar.set)
+        
+        # Pack the scrollbar and canvas
+        summary_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        summary_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Create window for the content frame
+        canvas_window = summary_canvas.create_window((0, 0), window=summary_content, anchor="nw")
+        
+        # Configure canvas to resize with window
+        def _configure_summary_canvas(event):
+            # Update the scrollregion to encompass the inner frame
+            summary_canvas.configure(scrollregion=summary_canvas.bbox("all"))
+            # Resize the canvas window to fit the inner frame width
+            summary_canvas.itemconfigure(canvas_window, width=event.width)
+            
+        # Add mousewheel scrolling
+        def _on_summary_mousewheel(event):
+            # Respond to Linux and Windows wheel event
+            if event.num == 4 or event.delta > 0:
+                summary_canvas.yview_scroll(-1, "units")
+            elif event.num == 5 or event.delta < 0:
+                summary_canvas.yview_scroll(1, "units")
+                
+        # Bind events for scrolling
+        summary_canvas.bind_all("<MouseWheel>", _on_summary_mousewheel)  # Windows
+        summary_canvas.bind_all("<Button-4>", _on_summary_mousewheel)    # Linux scroll up
+        summary_canvas.bind_all("<Button-5>", _on_summary_mousewheel)    # Linux scroll down
+        
+        # Bind for MacOS
+        if 'darwin' in os.sys.platform:
+            summary_canvas.bind_all("<MouseWheel>", lambda event: summary_canvas.yview_scroll(int(-1*(event.delta)), "units"))
+            
+        summary_content.bind("<Configure>", _configure_summary_canvas)
+        summary_canvas.bind("<Configure>", lambda e: summary_canvas.itemconfigure(canvas_window, width=e.width))
+        
+        # Create a frame for summary statistics with a more structured layout
+        stats_frame = ttk.LabelFrame(summary_content, text="Statistiques de ventilation", padding=15)
+        stats_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Column layout for better organization
+        left_frame = ttk.Frame(stats_frame)
+        left_frame.grid(row=0, column=0, sticky="nw", padx=(0, 20))
+        
+        right_frame = ttk.Frame(stats_frame)
+        right_frame.grid(row=0, column=1, sticky="nw")
         
         # Summary labels
-        ttk.Label(stats_frame, text="Nombre total de bouches:", 
+        ttk.Label(left_frame, text="Nombre total de bouches:", 
                 font=("Helvetica", 12)).grid(row=0, column=0, sticky="w", pady=5)
         
-        total_vents_value = ttk.Label(stats_frame, text="0", font=("Helvetica", 12, "bold"))
-        total_vents_value.grid(row=0, column=1, sticky="w", pady=5)
+        total_vents_value = ttk.Label(left_frame, text="0", font=("Helvetica", 12, "bold"))
+        total_vents_value.grid(row=0, column=1, sticky="w", pady=5, padx=(10, 0))
         
         # Category counts
         row = 1
         category_labels = {}
         for category_id, category_info in categories.items():
-            ttk.Label(stats_frame, text=f"Nombre de {category_info['name']}:", 
+            ttk.Label(left_frame, text=f"Nombre de {category_info['name']}:", 
                     font=("Helvetica", 12)).grid(row=row, column=0, sticky="w", pady=5)
             
-            count_label = ttk.Label(stats_frame, text="0", font=("Helvetica", 12, "bold"))
-            count_label.grid(row=row, column=1, sticky="w", pady=5)
+            count_label = ttk.Label(left_frame, text="0", font=("Helvetica", 12, "bold"))
+            count_label.grid(row=row, column=1, sticky="w", pady=5, padx=(10, 0))
             category_labels[category_id] = count_label
             row += 1
         
         # Flow rates
-        ttk.Label(stats_frame, text="Débit total insufflé:", 
-                font=("Helvetica", 12)).grid(row=row, column=0, sticky="w", pady=5)
-        total_inflow_value = ttk.Label(stats_frame, text="0 m³/h", font=("Helvetica", 12, "bold"))
-        total_inflow_value.grid(row=row, column=1, sticky="w", pady=5)
-        row += 1
+        ttk.Label(right_frame, text="Débit total insufflé:", 
+                font=("Helvetica", 12)).grid(row=0, column=0, sticky="w", pady=5)
+        total_inflow_value = ttk.Label(right_frame, text="0 m³/h", font=("Helvetica", 12, "bold"))
+        total_inflow_value.grid(row=0, column=1, sticky="w", pady=5, padx=(10, 0))
         
-        ttk.Label(stats_frame, text="Débit total extrait:", 
-                font=("Helvetica", 12)).grid(row=row, column=0, sticky="w", pady=5)
-        total_outflow_value = ttk.Label(stats_frame, text="0 m³/h", font=("Helvetica", 12, "bold"))
-        total_outflow_value.grid(row=row, column=1, sticky="w", pady=5)
-        row += 1
+        ttk.Label(right_frame, text="Débit total extrait:", 
+                font=("Helvetica", 12)).grid(row=1, column=0, sticky="w", pady=5)
+        total_outflow_value = ttk.Label(right_frame, text="0 m³/h", font=("Helvetica", 12, "bold"))
+        total_outflow_value.grid(row=1, column=1, sticky="w", pady=5, padx=(10, 0))
         
-        ttk.Label(stats_frame, text="Équilibre aéraulique:", 
-                font=("Helvetica", 12)).grid(row=row, column=0, sticky="w", pady=5)
-        balance_value = ttk.Label(stats_frame, text="0 m³/h", font=("Helvetica", 12, "bold"))
-        balance_value.grid(row=row, column=1, sticky="w", pady=5)
+        # Add separator for visual structure
+        ttk.Separator(summary_content, orient="horizontal").pack(fill="x", pady=15)
+        
+        # Create a new section for professional metrics
+        metrics_frame = ttk.LabelFrame(summary_content, text="Indicateurs techniques", padding=15)
+        metrics_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Air renewal metrics
+        rah_frame = ttk.Frame(metrics_frame)
+        rah_frame.pack(fill=tk.X, expand=True)
+        
+        ttk.Label(rah_frame, text="Renouvellement d'air par heure (RAH):", 
+                font=("Helvetica", 12)).grid(row=0, column=0, sticky="w", pady=5)
+        rah_value = ttk.Label(rah_frame, text="N/A", font=("Helvetica", 12, "bold"))
+        rah_value.grid(row=0, column=1, sticky="w", pady=5, padx=(10, 0))
+        
+        ttk.Label(rah_frame, text="RAH recommandé (résidentiel):", 
+                font=("Helvetica", 12)).grid(row=1, column=0, sticky="w", pady=5)
+        ttk.Label(rah_frame, text="0,35 min.", font=("Helvetica", 12)).grid(row=1, column=1, sticky="w", pady=5, padx=(10, 0))
+        
+        ttk.Label(rah_frame, text="Conformité aux normes:", 
+                font=("Helvetica", 12)).grid(row=2, column=0, sticky="w", pady=5)
+        rah_compliance = ttk.Label(rah_frame, text="N/A", font=("Helvetica", 12, "bold"))
+        rah_compliance.grid(row=2, column=1, sticky="w", pady=5, padx=(10, 0))
+        
+        # Add separator
+        ttk.Separator(metrics_frame, orient="horizontal").pack(fill="x", pady=10)
+        
+        # Plenum data
+        plenum_frame = ttk.Frame(metrics_frame)
+        plenum_frame.pack(fill=tk.X, expand=True)
+        
+        ttk.Label(plenum_frame, text="Nombre de plenums Simple Flux:", 
+                font=("Helvetica", 12)).grid(row=0, column=0, sticky="w", pady=5)
+        plenum_simple_count = ttk.Label(plenum_frame, text="0", font=("Helvetica", 12, "bold"))
+        plenum_simple_count.grid(row=0, column=1, sticky="w", pady=5, padx=(10, 0))
+        
+        ttk.Label(plenum_frame, text="Nombre de plenums Double Flux:", 
+                font=("Helvetica", 12)).grid(row=1, column=0, sticky="w", pady=5)
+        plenum_double_count = ttk.Label(plenum_frame, text="0", font=("Helvetica", 12, "bold"))
+        plenum_double_count.grid(row=1, column=1, sticky="w", pady=5, padx=(10, 0))
+        
+        ttk.Label(plenum_frame, text="Surface totale des plenums:", 
+                font=("Helvetica", 12)).grid(row=2, column=0, sticky="w", pady=5)
+        plenum_total_area = ttk.Label(plenum_frame, text="N/A", font=("Helvetica", 12, "bold"))
+        plenum_total_area.grid(row=2, column=1, sticky="w", pady=5, padx=(10, 0))
+        
+        # Note section
+        note_frame = ttk.LabelFrame(summary_content, text="Remarques", padding=15)
+        note_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=(15, 5))
+        
+        note_text = tk.Text(note_frame, height=4, width=50, wrap="word", font=("Helvetica", 11))
+        note_text.insert("1.0", "Pour un système VMC simple flux, le débit d'extraction doit être conforme aux valeurs minimales réglementaires.\nPour un système VMC double flux, les débits d'insufflation et d'extraction doivent être équilibrés pour un fonctionnement optimal.")
+        note_text.config(state="disabled")
+        note_text.pack(fill=tk.BOTH, expand=True)
         
         # Bottom buttons
         button_frame = ttk.Frame(main_frame)
@@ -1965,7 +2085,11 @@ class GraphicalView(tk.Tk):
             "category_labels": category_labels,
             "total_inflow_value": total_inflow_value,
             "total_outflow_value": total_outflow_value,
-            "balance_value": balance_value
+            "rah_value": rah_value,
+            "rah_compliance": rah_compliance,
+            "plenum_simple_count": plenum_simple_count,
+            "plenum_double_count": plenum_double_count,
+            "plenum_total_area": plenum_total_area
         }
         
         # Create a callback handler for ventilation updates 
@@ -2045,6 +2169,12 @@ class GraphicalView(tk.Tk):
     def _handle_summary_window_close(self, summary_window):
         """Handle cleanup when summary window is closed"""
         try:
+            # Unbind mousewheel events
+            if hasattr(summary_window, 'summary_canvas'):
+                summary_window.unbind_all("<MouseWheel>")
+                summary_window.unbind_all("<Button-4>")
+                summary_window.unbind_all("<Button-5>")
+            
             # Now that we have an unsubscribe method, use it to clean up properly
             if hasattr(summary_window, 'ventilation_update_handler'):
                 ivy_bus.unsubscribe("ventilation_summary_update", summary_window.ventilation_update_handler)
@@ -2202,20 +2332,82 @@ class GraphicalView(tk.Tk):
             widgets["total_inflow_value"].config(text=f"{total_inflow} m³/h")
             widgets["total_outflow_value"].config(text=f"{total_outflow} m³/h")
             
-            # Calculate balance
-            balance = total_inflow - total_outflow
-            balance_text = f"{abs(balance)} m³/h"
-            
-            if balance > 0:
-                balance_text = f"+{balance_text} (Surpression)"
-                widgets["balance_value"].config(text=balance_text, foreground="blue")
-            elif balance < 0:
-                balance_text = f"-{balance_text} (Dépression)" 
-                widgets["balance_value"].config(text=balance_text, foreground="red")
-            else:
-                balance_text = f"{balance_text} (Équilibré)"
-                widgets["balance_value"].config(text=balance_text, foreground="green")
+            # Calculate air renewal rates and professional metrics
+            if "plenum_simple_count" in widgets and "plenum_double_count" in widgets and "plenum_total_area" in widgets and "rah_value" in widgets and "rah_compliance" in widgets:
+                # Get plenum data if available
+                simple_count = 0
+                double_count = 0
+                total_area = 0
                 
+                if data and "plenums" in data:
+                    plenums_data = data["plenums"]
+                    print(f"[View] Found {len(plenums_data)} plenums in data")
+                    
+                    if plenums_data:
+                        # Count plenum types
+                        simple_count = 0
+                        double_count = 0
+                        total_area = 0
+                        
+                        for p in plenums_data:
+                            p_type = p.get("type", "Simple")  # Default to Simple if not specified
+                            if p_type == "Double":
+                                double_count += 1
+                            else:
+                                simple_count += 1
+                                
+                            # Add to total area
+                            total_area += p.get("area", 0)
+                        
+                        # Update plenum counts
+                        widgets["plenum_simple_count"].config(text=str(simple_count))
+                        widgets["plenum_double_count"].config(text=str(double_count))
+                        
+                        # Update total plenum area
+                        if total_area > 0:
+                            widgets["plenum_total_area"].config(text=f"{total_area:.2f} m²")
+                        
+                        # Calculate total volume of all plenums
+                        total_volume = 0
+                        for p in plenums_data:
+                            p_area = p.get("area", 0)
+                            p_height = p.get("height", 2.5)
+                            total_volume += (p_area * p_height)
+                        
+                        if total_volume > 0:
+                            # Use appropriate flow based on plenum types
+                            # For RAH calculation, we'll use the largest value 
+                            # between extraction (simple flux) and insufflation (double flux)
+                            extraction_rah = total_outflow / total_volume if total_volume > 0 else 0
+                            insufflation_rah = total_inflow / total_volume if total_volume > 0 else 0
+                            
+                            # Use appropriate RAH based on plenum types
+                            if double_count > 0:
+                                # If at least one plenum is Double, use insufflation for RAH
+                                rah = insufflation_rah
+                                rah_text = f"{rah:.2f}"
+                                print(f"[View] Calculated RAH for Double flux: {rah_text} (inflow: {total_inflow} m³/h, volume: {total_volume:.2f} m³)")
+                            else:
+                                # Otherwise use extraction (simple flux standard)
+                                rah = extraction_rah
+                                rah_text = f"{rah:.2f}"
+                                print(f"[View] Calculated RAH for Simple flux: {rah_text} (outflow: {total_outflow} m³/h, volume: {total_volume:.2f} m³)")
+                            
+                            widgets["rah_value"].config(text=rah_text)
+                            
+                            # Check compliance
+                            if rah >= 0.35:
+                                widgets["rah_compliance"].config(text="Conforme", foreground="green")
+                            else:
+                                widgets["rah_compliance"].config(text="Non conforme", foreground="red")
+                        else:
+                            print("[View] Warning: Total volume is zero, cannot calculate RAH")
+                
+                # Update plenum information
+                widgets["plenum_simple_count"].config(text=str(simple_count))
+                widgets["plenum_double_count"].config(text=str(double_count))
+                widgets["plenum_total_area"].config(text=f"{total_area:.2f} m²")
+            
             print(f"[View] Summary populated with {total_vents} vents. Inflow: {total_inflow}, Outflow: {total_outflow}")
         except Exception as e:
             print(f"[View] Error updating statistics widgets: {e}")
