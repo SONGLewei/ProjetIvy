@@ -209,6 +209,170 @@
         ]
     },
     {
+        "name": "RDC (copie)",
+        "height": 12.0,
+        "walls": [
+            {
+                "start": [
+                    237.0,
+                    445.0
+                ],
+                "end": [
+                    889.0,
+                    445.0
+                ]
+            },
+            {
+                "start": [
+                    890.0,
+                    119.0
+                ],
+                "end": [
+                    235.0,
+                    119.0
+                ]
+            },
+            {
+                "start": [
+                    887.0,
+                    117.0
+                ],
+                "end": [
+                    887.0,
+                    149.0
+                ]
+            },
+            {
+                "start": [
+                    236.0,
+                    424.0
+                ],
+                "end": [
+                    236.0,
+                    446.0
+                ]
+            },
+            {
+                "start": [
+                    887.0,
+                    355.0
+                ],
+                "end": [
+                    887.0,
+                    444.0
+                ]
+            },
+            {
+                "start": [
+                    236.0,
+                    114.0
+                ],
+                "end": [
+                    236.0,
+                    165.0
+                ]
+            }
+        ],
+        "windows": [
+            {
+                "start": [
+                    887.0,
+                    149.0
+                ],
+                "end": [
+                    887.0,
+                    235.0
+                ],
+                "thickness": 5
+            },
+            {
+                "start": [
+                    236.0,
+                    328.0
+                ],
+                "end": [
+                    236.0,
+                    424.0
+                ],
+                "thickness": 5
+            }
+        ],
+        "doors": [
+            {
+                "start": [
+                    236.0,
+                    165.0
+                ],
+                "end": [
+                    236.0,
+                    220.0
+                ]
+            }
+        ],
+        "vents": [
+            {
+                "start": [
+                    547.0,
+                    283.0
+                ],
+                "end": [
+                    547.0,
+                    299.0
+                ],
+                "name": "Mauvaise air",
+                "diameter": "40",
+                "flow_rate": "120",
+                "function": "extraction_interne",
+                "color": "#ff0000"
+            },
+            {
+                "start": [
+                    843.0,
+                    164.0
+                ],
+                "end": [
+                    843.0,
+                    180.0
+                ],
+                "name": "Bleu foncé",
+                "diameter": "100",
+                "flow_rate": "42",
+                "function": "extraction_externe",
+                "color": "#4c7093"
+            },
+            {
+                "start": [
+                    843.0,
+                    403.0
+                ],
+                "end": [
+                    843.0,
+                    419.0
+                ],
+                "name": "Air frais",
+                "diameter": "200",
+                "flow_rate": "35",
+                "function": "admission_externe",
+                "color": "#66ccff"
+            }
+        ],
+        "plenums": [
+            {
+                "start": [
+                    268.0,
+                    150.0
+                ],
+                "end": [
+                    327.0,
+                    209.0
+                ],
+                "max_flow": 1000,
+                "type": "Double",
+                "area": 8.7
+            }
+        ]
+    },
+    {
         "name": "Premiere étage",
         "height": 2.5,
         "walls": [

@@ -927,6 +927,11 @@ class GraphicalView(tk.Tk):
             label="Definir la hauteur",
             command=lambda: self.on_set_height(floor_index)
         )
+        
+        menu.add_command(
+            label="Dupliquer",
+            command=lambda: self.on_duplicate_floor(floor_index)
+        )
 
         menu.add_separator()
 
@@ -936,6 +941,12 @@ class GraphicalView(tk.Tk):
         )
 
         menu.tk_popup(event.x_root, event.y_root)
+        
+    def on_duplicate_floor(self, floor_index):
+        """Duplicate the selected floor"""
+        ivy_bus.publish("duplicate_floor_request", {
+            "floor_index": floor_index
+        })
 
     def on_rename_floor(self, floor_index):
         new_name = simpledialog.askstring(

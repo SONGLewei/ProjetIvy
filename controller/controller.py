@@ -55,8 +55,9 @@ class Controller:
         ivy_bus.subscribe("reset_app_request", self.handle_reset_app_request)
 
         ivy_bus.subscribe("create_plenum_request", self.handle_create_plenum_request)
-
-
+        
+        # Add a handler for floor duplication
+        ivy_bus.subscribe("duplicate_floor_request", self.handle_duplicate_floor_request)
 
         self.wall_start_point = None
         self.is_canceled_wall_draw = False
@@ -1508,3 +1509,112 @@ class Controller:
         """Handle notification that the plenum has been cleared"""
         self.the_plenum = None
         ivy_bus.publish("enable_tool_button", {"tool": "plenum"})
+
+    def handle_duplicate_floor_request(self, data):
+        """
+        Duplicates a floor with all its contents (walls, windows, doors, vents, plenums)
+        """
+        floor_index = data.get("floor_index")
+        
+        if floor_index is None or floor_index < 0 or floor_index >= len(self.floors):
+            ivy_bus.publish("show_alert_request", {
+                "title": "Erreur de duplication",
+                "message": "Impossible de dupliquer cet étage."
+            })
+            return
+            
+        # Get the source floor to duplicate
+        source_floor = self.floors[floor_index]
+        
+        # Create a new floor with a derived name
+        new_floor_name = f"{source_floor.name} (copie)"
+        
+        # Create a deep copy of the floor by serializing and deserializing
+        source_dict = source_floor.to_dict()
+        
+        # Create new floor with the new name
+        from model.floor import Floor
+        from model.wall import Wall
+        from model.window import Window
+        from model.door import Door
+        from model.vent import Vent
+        from model.plenum import Plenum
+        
+        new_floor = Floor(new_floor_name)
+        new_floor.height = source_dict["height"]
+        
+        # Copy walls
+        for wall_dict in source_dict["walls"]:
+            new_wall = Wall(tuple(wall_dict["start"]), tuple(wall_dict["end"]))
+            new_floor.add_wall(new_wall)
+            
+        # Copy windows
+        for window_dict in source_dict["windows"]:
+            new_window = Window(
+                tuple(window_dict["start"]), 
+                tuple(window_dict["end"]),
+                thickness=window_dict.get("thickness", 5)
+            )
+            new_floor.add_window(new_window)
+            
+        # Copy doors
+        for door_dict in source_dict["doors"]:
+            new_door = Door(
+                tuple(door_dict["start"]), 
+                tuple(door_dict["end"]),
+                thickness=door_dict.get("thickness", 5)
+            )
+            new_floor.add_door(new_door)
+            
+        # Copy vents
+        for vent_dict in source_dict["vents"]:
+            new_vent = Vent(
+                tuple(vent_dict["start"]),
+                tuple(vent_dict["end"]),
+                vent_dict.get("name", ""),
+                vent_dict.get("diameter", ""),
+                vent_dict.get("flow_rate", ""),
+                vent_dict.get("function", "extraction_interne"),
+                vent_dict.get("color", "#ff0000")
+            )
+            new_floor.add_vent(new_vent)
+            
+        # Copy plenums
+        if "plenums" in source_dict:
+            for plenum_dict in source_dict["plenums"]:
+                new_plenum = Plenum(
+                    tuple(plenum_dict["start"]),
+                    tuple(plenum_dict["end"]),
+                    max_flow=plenum_dict.get("max_flow", 1000)
+                )
+                new_plenum.type = plenum_dict.get("type")
+                new_plenum.area = plenum_dict.get("area")
+                new_floor.add_plenum(new_plenum)
+        
+        # Insert the new floor after the source floor
+        insert_index = floor_index + 1
+        self.floors.insert(insert_index, new_floor)
+        
+        # Update selected floor index to the new floor
+        self.selected_floor_index = insert_index
+        
+        # Clear the canvas
+        ivy_bus.publish("clear_canvas_update", {})
+        
+        # Update the floor list and select the new floor
+        ivy_bus.publish("new_floor_update", {
+            "floors": [f.name for f in self.floors],
+            "selected_floor_index": self.selected_floor_index
+        })
+        
+        # Publish the height of the new floor
+        self._publish_height(new_floor)
+        
+        # Request to draw the floor contents
+        self.handle_floor_selected_request({"floor_index": insert_index})
+        
+        # Send onion skin preview if we're not on the first floor
+        if self.selected_floor_index > 0:
+            self._send_onion_skin_preview()
+            
+        print(f"[Controller] Duplicated floor {floor_index} ({source_floor.name}) to position {insert_index} ({new_floor_name})")
