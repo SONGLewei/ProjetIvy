@@ -37,6 +37,8 @@ class Controller:
         ivy_bus.subscribe("draw_vent_request",      self.handle_draw_vent_request)
         ivy_bus.subscribe("cancal_to_draw_vent_request", self.handle_cancel_vent)
         ivy_bus.subscribe("create_vent_request",    self.handle_create_vent_request)
+        ivy_bus.subscribe("cancel_plenum_request",  self.handle_cancel_plenum)
+        ivy_bus.subscribe("plenum_cleared_notification", self.handle_plenum_cleared)
 
         ivy_bus.subscribe("delete_item_request", self.handle_delete_item_request)
         ivy_bus.subscribe("set_floor_height_request", self.handle_set_floor_height_request)
@@ -193,7 +195,7 @@ class Controller:
                 )
 
                 # Redraw all walls to reflect any modifications made by _check_wall_overlap
-                ivy_bus.publish("clear_canvas_update", {})
+                ivy_bus.publish("clear_canvas_update", {"redraw_operation": True})
                 
                 # Redraw all walls
                 for wall_obj in current_floor.walls:
@@ -232,6 +234,16 @@ class Controller:
                         "flow": vent_item.flow_rate,
                         "role": vent_item.function
                     })
+                
+                # Redraw plenum if it exists
+                if hasattr(current_floor, "plenums") and current_floor.plenums:
+                    for plenum in current_floor.plenums:
+                        ivy_bus.publish("draw_plenum_update", {
+                            "start": plenum.start,
+                            "end": plenum.end,
+                            "max_flow": plenum.max_flow,
+                            "type": plenum.type
+                        })
 
                 self.window_start_point = None
 
@@ -317,7 +329,8 @@ class Controller:
                 )
 
                 # Redraw all walls to reflect any modifications made by _check_wall_overlap
-                ivy_bus.publish("clear_canvas_update", {})
+                # Mark this as a redraw operation, not a full clear
+                ivy_bus.publish("clear_canvas_update", {"redraw_operation": True})
                 
                 # Redraw all walls
                 for wall_obj in current_floor.walls:
@@ -356,6 +369,16 @@ class Controller:
                         "flow": vent_item.flow_rate,
                         "role": vent_item.function
                     })
+                
+                # Redraw plenum if it exists
+                if hasattr(current_floor, "plenums") and current_floor.plenums:
+                    for plenum in current_floor.plenums:
+                        ivy_bus.publish("draw_plenum_update", {
+                            "start": plenum.start,
+                            "end": plenum.end,
+                            "max_flow": plenum.max_flow,
+                            "type": plenum.type
+                        })
 
                 self.door_start_point = None
 
@@ -516,6 +539,15 @@ class Controller:
 
             ivy_bus.publish("clear_canvas_update", {})
 
+            # Check if the selected floor has plenums and update the state
+            has_plenum = hasattr(selected_floor, "plenums") and len(selected_floor.plenums) > 0
+            if has_plenum:
+                self.the_plenum = True
+                ivy_bus.publish("disable_tool_button", {"tool": "plenum"})
+            else:
+                self.the_plenum = None
+                ivy_bus.publish("enable_tool_button", {"tool": "plenum"})
+
             # told View to redraw all the walls      Il faut dire tous les objets apres iciiiiiiiiiiii
             for wall_obj in selected_floor.walls:
                 ivy_bus.publish("draw_wall_update", {
@@ -672,8 +704,10 @@ class Controller:
         if self.selected_floor_index is None:
             return
 
-        obj_type = data["type"]
-        coords = data["coords"]
+        # Unpack data
+        obj_type = data.get("type")
+        coords = data.get("coords")
+        print(f"[Controller] Deleting {obj_type} with coords {coords}")
         
         # For vents, the coordinates might have more values due to arrow shape
         # Just extract the start and end points we need for comparison
@@ -704,7 +738,16 @@ class Controller:
             # Send update for ventilation summary if a vent was deleted
             self.handle_get_ventilation_summary_request({})
         elif obj_type == "plenum":
+            # Delete the plenum from both the controller reference and the floor's plenums list
             self.the_plenum = None
+            if hasattr(floor, "plenums"):
+                # Match plenum by coordinates (start and end)
+                floor.plenums = [p for p in floor.plenums if not same_segment(p)]
+                print(f"[Controller] Deleted plenum, remaining: {len(floor.plenums)}")
+                
+                # Re-enable the plenum button when a plenum is deleted
+                if len(floor.plenums) == 0:
+                    ivy_bus.publish("enable_tool_button", {"tool": "plenum"})
 
         # Always refresh the onion skin display after deletion
         # This will ensure the onion skin is correctly updated
@@ -795,7 +838,8 @@ class Controller:
             })
             return
         
-        self.the_plenum = True
+        # Mark that we're starting plenum creation, but will reset if cancelled
+        temp_plenum = True
             
         if self.selected_floor_index is None:
             return
@@ -822,10 +866,14 @@ class Controller:
                      return
             else:
                  print("[Controller] Plenum creation cancelled by user during flow input.")
+                 # Reset the plenum state since this was cancelled
+                 self.the_plenum = None
                  return
 
         except Exception as e:
              print(f"[Controller] Error showing simpledialog or processing input: {e}")
+             # Reset the plenum state in case of error
+             self.the_plenum = None
              return
 
         plenum_type = None
@@ -840,7 +888,6 @@ class Controller:
                     plenum_type = type_str
                     print(f"[Controller] User provided type: {plenum_type}")
                 else:
-
                     plenum_type = None
                     print("[Controller] User did not provide a type or cancelled.")
 
@@ -857,6 +904,7 @@ class Controller:
             plenum_obj.type = plenum_type
             plenum_obj.floor_index = self.selected_floor_index
 
+            # Now that creation is confirmed, officially set the plenum
             self.the_plenum = plenum_obj 
             
             print(f"[Controller] Created the single plenum object on floor {plenum_obj.floor_index}: {plenum_obj} with Type: {plenum_obj.type}")
@@ -873,10 +921,17 @@ class Controller:
                 "type": plenum_obj.type
             })
 
+            # Disable the plenum button
             ivy_bus.publish("disable_tool_button", {"tool": "plenum"})
+            
+            # Switch to the selection tool automatically after placing a plenum
+            self.current_tool = 'select'
+            ivy_bus.publish("tool_selected_update", {"tool": 'select'})
         
         else:
              print("[Controller] Failed to get valid max_flow, plenum not created.")
+             # Reset the plenum state since we couldn't create it
+             self.the_plenum = None
 
     def _send_onion_skin_preview(self):
         """Send data for onion skin preview of the floor below current floor"""
@@ -934,6 +989,19 @@ class Controller:
                     "function": vent.function
                 }
             })
+            
+        # Add plenums
+        if hasattr(floor_below, "plenums"):
+            for plenum in floor_below.plenums:
+                items.append({
+                    "type": "plenum",
+                    "coords": (plenum.start, plenum.end),
+                    "fill": "blue",
+                    "additional_data": {
+                        "max_flow": plenum.max_flow,
+                        "type": plenum.type
+                    }
+                })
 
         # Send the data to the view
         ivy_bus.publish("onion_skin_preview_update", {
@@ -1244,6 +1312,9 @@ class Controller:
         self.temp_vent_role = None
         self.temp_vent_color = None
         
+        # Reset plenum state
+        self.the_plenum = None
+        
         # Clear the canvas
         ivy_bus.publish("clear_canvas_update", {})
         
@@ -1270,4 +1341,20 @@ class Controller:
         # Reset ventilation summary
         self.handle_get_ventilation_summary_request({})
         
+        # Enable the plenum button - this is the only place we enable it
+        ivy_bus.publish("enable_tool_button", {"tool": "plenum"})
+        
         print("[Controller] Application has been reset to initial state")
+
+    def handle_cancel_plenum(self, data):
+        """Handle cancellation of plenum drawing"""
+        # Note: We only reset the plenum state but don't re-enable the button
+        # The button will only be re-enabled when the application is reset
+        self.the_plenum = None
+        # We don't re-enable the button here anymore
+        # ivy_bus.publish("enable_tool_button", {"tool": "plenum"})
+
+    def handle_plenum_cleared(self, data):
+        """Handle notification that the plenum has been cleared"""
+        self.the_plenum = None
+        ivy_bus.publish("enable_tool_button", {"tool": "plenum"})

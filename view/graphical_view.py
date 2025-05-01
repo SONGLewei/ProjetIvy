@@ -57,6 +57,7 @@ class GraphicalView(tk.Tk):
         self.tooltips = []  # For storing button tooltips
         self.vent_tooltips = {}  # For storing vent tooltips by canvas item ID
         self.tool_buttons = {}  # Store tool buttons for styling
+        self.disabled_tools = set()  # Track which tools are disabled
 
         # Onion skin related variables
         self.onion_skin_items = []  # To track items drawn as part of onion skin
@@ -84,6 +85,7 @@ class GraphicalView(tk.Tk):
             "selected_floor": "#f0f3ff",  # Light blue for selected floor
             "unselected_floor": "white",  # White for unselected floor
             "floor_text": "#2f3039",  # Dark gray for floor text
+            "disabled_tool": "#e0e0e0",  # Light gray for disabled tools
         }
 
         self.icons = {}
@@ -112,6 +114,8 @@ class GraphicalView(tk.Tk):
         ivy_bus.subscribe("ventilation_summary_update", self.populate_ventilation_summary)
         ivy_bus.subscribe("ensure_onion_skin_refresh", self.on_ensure_onion_skin_refresh)
         ivy_bus.subscribe("draw_plenum_update",         self.on_draw_plenum_update)
+        ivy_bus.subscribe("disable_tool_button",        self.on_disable_tool_button)
+        ivy_bus.subscribe("enable_tool_button",         self.on_enable_tool_button)
 
 
         # Set initial cursor
@@ -792,6 +796,18 @@ class GraphicalView(tk.Tk):
         if self.current_tool == "vent":
             ivy_bus.publish("cancal_to_draw_vent_request", {})
             self._hide_placement_tooltip()
+            
+        if self.current_tool == "plenum" and hasattr(self, "plenum_start_x") and self.plenum_start_x is not None:
+            # Cancel the plenum drawing
+            if hasattr(self, "temp_plenum") and self.temp_plenum:
+                self.canvas.delete(self.temp_plenum)
+                self.temp_plenum = None
+            self.plenum_start_x = None
+            self.plenum_start_y = None
+            self._hide_placement_tooltip()
+            # Notify controller to cancel plenum creation
+            ivy_bus.publish("cancel_plenum_request", {})
+            print("[View] Plenum drawing cancelled by right-click")
 
     def on_canvas_release(self, event):
         if self.current_tool == "plenum" and hasattr(self, "plenum_start_x") and self.plenum_start_x is not None:
@@ -816,6 +832,15 @@ class GraphicalView(tk.Tk):
         ivy_bus.publish("new_floor_request", {})
 
     def on_tool_button_click(self, tool, event=None):
+        # Check if tool is disabled
+        if tool in self.disabled_tools:
+            # Show alert that this tool is disabled
+            self.on_show_alert_request({
+                "title": "Outil indisponible",
+                "message": "Plenum déjà présent"
+            })
+            return
+
         # Reset previous tool button appearance
         if self.current_tool and self.current_tool in self.tool_buttons:
             canvas = self.tool_buttons[self.current_tool]
@@ -1428,30 +1453,24 @@ class GraphicalView(tk.Tk):
 
     def on_tool_selected_update(self, data):
         """
-        When the Controller publishes 'tool_selected_update', it can update the interface status
-        (such as highlighting the current tool button, or displaying "Current Tool" in the status bar)
+        Tool selected update from controller
         """
-        # Reset previous tool button appearance
-        if self.current_tool and self.current_tool in self.tool_buttons:
-            canvas = self.tool_buttons[self.current_tool]
-            # Update all shapes on the canvas to use the default background color
-            for item in canvas.find_all():
-                if canvas.type(item) in ("rectangle", "oval"):
-                    canvas.itemconfig(item, fill=self.colors["button_bg"])
-
-        # Update current tool
-        self.current_tool = data.get("tool")
-
-        # Highlight selected tool button
-        if self.current_tool in self.tool_buttons:
-            canvas = self.tool_buttons[self.current_tool]
-            # Update all shapes on the canvas to use the selected color
-            for item in canvas.find_all():
-                if canvas.type(item) in ("rectangle", "oval"):
-                    canvas.itemconfig(item, fill=self.colors["selected_tool"])
-
-        # Update cursor
-        self._update_cursor()
+        tool = data.get("tool")
+        
+        # Skip if trying to select a disabled tool
+        if tool in self.disabled_tools:
+            print(f"[View] Ignoring attempt to select disabled tool: {tool}")
+            return
+            
+        if tool != self.current_tool:
+            # Set the current tool
+            self.current_tool = tool
+            
+            # Update cursor
+            self._update_cursor()
+            
+            # Update tool button visuals while preserving disabled state
+            self._highlight_tool_button(tool)
 
     def _update_cursor(self):
         """
@@ -1590,13 +1609,16 @@ class GraphicalView(tk.Tk):
                 })
 
     def on_floor_height_update(self, data):
+        """Handle floor height update from controller"""
         self.current_floor_height = data["height"]
         self._redraw_height_text()
 
     def _on_window_configure(self, event):
         """Handle window resizing events"""
         if event.widget is self:
-            self._redraw_height_text()
+            # Only redraw if we have a floor height to display
+            if self.current_floor_height is not None:
+                self._redraw_height_text()
 
             # Update the canvas scrollregion to match the new size
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -1607,18 +1629,38 @@ class GraphicalView(tk.Tk):
                 self.canvas.yview_moveto(0)
 
     def _redraw_height_text(self):
+        """Redraw the height text display at the bottom of the canvas"""
         if self.current_floor_height is None:
             return
+            
+        # Delete existing text if present
         if self.height_text_id:
             self.canvas.delete(self.height_text_id)
+            self.height_text_id = None
 
-        x_visible = self.canvas.canvasx(self.canvas.winfo_width()) - 10
-        y_visible = self.canvas.canvasy(self.canvas.winfo_height()) - 10
+        # Calculate position for the text (bottom right corner)
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        
+        # If canvas not yet properly sized, wait and try again
+        if canvas_width <= 1 or canvas_height <= 1:
+            self.after(100, self._redraw_height_text)
+            return
+            
+        # Position at bottom right
+        x_visible = self.canvas.canvasx(canvas_width) - 10
+        y_visible = self.canvas.canvasy(canvas_height) - 10
+        
+        # Format the text
         txt = f"Hauteur de cet etage : {self.current_floor_height} m"
+        
+        # Create the height text with no background
         self.height_text_id = self.canvas.create_text(
-             x_visible, y_visible,
-            anchor="se", text=txt,
-            font=("Helvetica", 10, "italic"), fill="#444"
+            x_visible, y_visible,
+            anchor="se", 
+            text=txt,
+            fill="#444",
+            font=("Helvetica", 10, "italic")
         )
 
     def _request_initial_floor(self):
@@ -1668,11 +1710,27 @@ class GraphicalView(tk.Tk):
                 self.floor_vsb.pack_forget()
 
     def _highlight_tool_button(self, tool):
-        if tool in self.tool_buttons:
+        # Reset all buttons to normal state first, except disabled ones
+        for t, canvas in self.tool_buttons.items():
+            if t not in self.disabled_tools:  # Skip disabled buttons
+                for item in canvas.find_all():
+                    if canvas.type(item) in ("rectangle", "oval"):
+                        canvas.itemconfig(item, fill=self.colors["button_bg"])
+
+        # Highlight selected tool button
+        if tool in self.tool_buttons and tool not in self.disabled_tools:
             canvas = self.tool_buttons[tool]
             for item in canvas.find_all():
                 if canvas.type(item) in ("rectangle", "oval"):
                     canvas.itemconfig(item, fill=self.colors["selected_tool"])
+                    
+        # Ensure disabled tools stay visually disabled
+        for disabled_tool in self.disabled_tools:
+            if disabled_tool in self.tool_buttons:
+                canvas = self.tool_buttons[disabled_tool]
+                for item in canvas.find_all():
+                    if canvas.type(item) in ("rectangle", "oval"):
+                        canvas.itemconfig(item, fill=self.colors["disabled_tool"])
 
     def on_save_button_click(self):
         json_file_path = filedialog.asksaveasfilename(
@@ -2165,7 +2223,7 @@ class GraphicalView(tk.Tk):
             if length > 0:
                 dx, dy = dx/length, dy/length
 
-                # Create the base line (using width=2 to match main view)
+                # Create the base line (using width=2 to match the onion skin)
                 item_id = self.canvas.create_line(
                     start[0], start[1], end[0], end[1],
                     fill=opacity_color, width=2, tags=("onion_skin",)
@@ -2191,6 +2249,15 @@ class GraphicalView(tk.Tk):
                 )
 
                 self.onion_skin_items.append(arrowhead_id)
+        elif item_type == "plenum":
+            start, end = coords
+            # Create the rectangle for plenum with reduced opacity
+            # Use blue color (same as in main view) with opacity
+            plenum_color = self._apply_opacity_to_color("blue", self.onion_skin_opacity)
+            item_id = self.canvas.create_rectangle(
+                start[0], start[1], end[0], end[1],
+                outline=plenum_color, width=3, fill="", tags=("onion_skin",)
+            )
 
         if item_id:
             self.onion_skin_items.append(item_id)
@@ -2203,6 +2270,8 @@ class GraphicalView(tk.Tk):
         # Handle named colors
         if color == "black":
             color = "#000000"
+        elif color == "blue":
+            color = "#0000FF"  # Standard blue for plenum
         elif color == "#ffafcc":  # Window color
             color = "#ffafcc"
         elif color == "#dda15e":  # Door color
@@ -2297,8 +2366,17 @@ class GraphicalView(tk.Tk):
                 except Exception:
                     # In case of error, clear the reference to be safe
                     self.ventilation_summary_window = None
-        
-        # Removed alert message for a cleaner experience
+        elif self.current_tool == 'plenum' and hasattr(self, "plenum_start_x") and self.plenum_start_x is not None:
+            # Cancel the plenum drawing
+            if hasattr(self, "temp_plenum") and self.temp_plenum:
+                self.canvas.delete(self.temp_plenum)
+                self.temp_plenum = None
+            self.plenum_start_x = None
+            self.plenum_start_y = None
+            self._hide_placement_tooltip()
+            # Notify controller to cancel plenum creation
+            ivy_bus.publish("cancel_plenum_request", {})
+            print("[View] Plenum drawing cancelled by Escape key")
 
     def on_reset_button_click(self):
         """Handle reset button click with confirmation dialog"""
@@ -2401,6 +2479,16 @@ class GraphicalView(tk.Tk):
         self._ensure_onion_skin_below()
 
     def on_clear_canvas_update(self, data):
+        # Store whether this is a redraw operation (not a true clear)
+        is_redraw = data.get("redraw_operation", False)
+        
+        # Check if there were any plenums on the canvas before clearing
+        plenum_items = self.canvas.find_withtag("plenum")
+        has_plenums = len(plenum_items) > 0
+        
+        # Store the current floor height before clearing
+        previous_height = self.current_floor_height
+        
         # Store the background tile IDs before clearing
         bg_tile_ids = self.bg_tile_ids.copy() if hasattr(self, 'bg_tile_ids') else []
         
@@ -2415,8 +2503,12 @@ class GraphicalView(tk.Tk):
         
         if self.height_text_id:
             self.height_text_id = None
-            
-        self.current_floor_height = None
+        
+        # Restore the floor height for redraw operations
+        if is_redraw:
+            self.current_floor_height = previous_height
+        else:
+            self.current_floor_height = None
         
         # Reset the canvas view position
         self.canvas.configure(scrollregion=(0, 0, self.canvas.winfo_width(), self.canvas.winfo_height()))
@@ -2425,9 +2517,92 @@ class GraphicalView(tk.Tk):
         
         # Redraw the background grid
         self._update_grid_background()
+        
+        # Update the tool buttons (in case plenum was removed)
+        self._update_disabled_tools()
+        
+        # Only notify about plenums if this is a genuine clear, not a redraw operation
+        if has_plenums and not is_redraw:
+            ivy_bus.publish("plenum_cleared_notification", {})
+            
+        # Redraw the height text if this is a redraw operation and we have a floor height
+        if is_redraw and self.current_floor_height is not None:
+            self.after(50, self._redraw_height_text)
 
     def on_ensure_onion_skin_refresh(self, data):
         """Handles the ensure_onion_skin_refresh event by requesting a fresh onion skin preview"""
         self._request_onion_skin_preview()
         # Ensure the onion skin appears in the correct z-order
         self.after(50, self._ensure_onion_skin_below)
+
+    def on_disable_tool_button(self, data):
+        tool = data.get("tool")
+        if tool:
+            self.disabled_tools.add(tool)
+            self._update_disabled_tools()
+            print(f"[View] Disabled tool: {tool}")
+
+    def on_enable_tool_button(self, data):
+        tool = data.get("tool")
+        if tool and tool in self.disabled_tools:
+            self.disabled_tools.remove(tool)
+            self._update_disabled_tools()
+            print(f"[View] Enabled tool: {tool}")
+            
+    def _update_disabled_tools(self):
+        """Update the visual appearance of disabled tools"""
+        for tool in self.tool_buttons:
+            canvas = self.tool_buttons[tool]
+            
+            # Update canvas appearance based on disabled state
+            if tool in self.disabled_tools:
+                # Apply disabled appearance
+                for item in canvas.find_all():
+                    if canvas.type(item) in ("rectangle", "oval"):
+                        canvas.itemconfig(item, fill=self.colors["disabled_tool"])
+                # Update tooltip to indicate disabled state
+                for tooltip in self.tooltips:
+                    if hasattr(tooltip, "_widget") and tooltip._widget == canvas:
+                        tooltip._text = "Plenum déjà présent"
+                # Unbind click event
+                canvas.unbind("<Button-1>")
+                
+                # If the disabled tool is the current tool, switch to select tool
+                if tool == self.current_tool:
+                    self.on_tool_button_click('select')
+            else:
+                # Only reset background if it's not the current tool
+                if tool != self.current_tool:
+                    for item in canvas.find_all():
+                        if canvas.type(item) in ("rectangle", "oval"):
+                            canvas.itemconfig(item, fill=self.colors["button_bg"])
+                else:
+                    # This is the current selected tool
+                    for item in canvas.find_all():
+                        if canvas.type(item) in ("rectangle", "oval"):
+                            canvas.itemconfig(item, fill=self.colors["selected_tool"])
+                            
+                # Rebind click event if it was previously disabled
+                canvas.bind("<Button-1>", lambda event, t=tool: self.on_tool_button_click(t))
+                # Reset tooltip text
+                for tooltip in self.tooltips:
+                    if hasattr(tooltip, "_widget") and tooltip._widget == canvas:
+                        # Reset to original tooltip based on tool type
+                        if tool == 'select':
+                            tooltip._text = 'Selection'
+                        elif tool == 'eraser':
+                            tooltip._text = 'Gomme'
+                        elif tool == 'wall':
+                            tooltip._text = 'Mur'
+                        elif tool == 'window':
+                            tooltip._text = 'Fenêtre'
+                        elif tool == 'door':
+                            tooltip._text = 'Porte'
+                        elif tool == 'vent':
+                            tooltip._text = 'Ventilation'
+                        elif tool == 'plenum':
+                            tooltip._text = 'Plenum'
+        
+        # Call highlight tool button to ensure current tool is properly highlighted
+        # while maintaining disabled states
+        self._highlight_tool_button(self.current_tool)
