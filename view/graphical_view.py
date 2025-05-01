@@ -7,7 +7,7 @@ from tkinter import messagebox
 from ivy.ivy_bus import ivy_bus
 from view.tooltip import Tooltip 
 from tkinter import filedialog
-from tkinter import Toplevel, Label, StringVar
+from tkinter import Toplevel, Label, StringVar, Frame
 
 class GraphicalView(tk.Tk):
     def __init__(self):
@@ -1317,8 +1317,73 @@ class GraphicalView(tk.Tk):
         start, end = data["start"], data["end"]
         role, color = data["role"], data["color"]
 
+        # Cancel any active tooltips
+        self._cancel_hover()
+        
+        # Make sure our app is in focus
+        self.focus_force()
+        
+        # Create a custom dialog to ensure it stays on top
+        from tkinter import Toplevel, Entry, Label, Button, StringVar, Frame
+        
+        def create_custom_dialog(title, prompt, initialvalue=""):
+            dialog = Toplevel(self)
+            dialog.title(title)
+            dialog.transient(self)  # Make dialog a child of the main window
+            dialog.grab_set()       # Make dialog modal
+            
+            # Force the dialog to be on top
+            dialog.attributes("-topmost", True)
+            dialog.lift()
+            dialog.focus_force()
+            
+            # Center the dialog on the screen
+            dialog_width = 350
+            dialog_height = 150
+            x = (self.winfo_screenwidth() // 2) - (dialog_width // 2)
+            y = (self.winfo_screenheight() // 2) - (dialog_height // 2)
+            dialog.geometry(f"{dialog_width}x{dialog_height}+{x}+{y}")
+            
+            # Configure the dialog
+            dialog.configure(padx=20, pady=20)
+            
+            # Add prompt label
+            Label(dialog, text=prompt, anchor="w").pack(pady=(0, 10), fill="x")
+            
+            # Add entry field
+            result = StringVar(value=initialvalue)
+            entry = Entry(dialog, textvariable=result, width=30)
+            entry.pack(pady=(0, 20), fill="x")
+            entry.focus_set()
+            
+            # Add buttons
+            button_frame = Frame(dialog)
+            button_frame.pack(side="bottom", fill="x")
+            
+            # Set up return value
+            dialog.result = None
+            
+            def on_ok():
+                dialog.result = result.get()
+                dialog.destroy()
+                
+            def on_cancel():
+                dialog.result = None
+                dialog.destroy()
+                
+            Button(button_frame, text="OK", command=on_ok, width=10).pack(side="right", padx=(5, 0))
+            Button(button_frame, text="Annuler", command=on_cancel, width=10).pack(side="right", padx=5)
+            
+            # Handle Enter and Escape keys
+            dialog.bind("<Return>", lambda event: on_ok())
+            dialog.bind("<Escape>", lambda event: on_cancel())
+            
+            # Wait for the dialog to be closed
+            self.wait_window(dialog)
+            return dialog.result
+        
         # Get vent name - name can be any text but must not be empty
-        name = simpledialog.askstring("Nom de la ventilation", "Entrez le nom de la ventilation :")
+        name = create_custom_dialog("Nom de la ventilation", "Entrez le nom de la ventilation :")
         if not name or name.strip() == "":
             self.on_show_alert_request({
                 "title": "Entree invalide",
@@ -1329,7 +1394,7 @@ class GraphicalView(tk.Tk):
 
         # Validate diameter is an integer
         while True:
-            diameter = simpledialog.askstring("Diamètre (mm)", "Entrez le diamètre de la ventilation (mm) :")
+            diameter = create_custom_dialog("Diamètre (mm)", "Entrez le diamètre de la ventilation (mm) :")
             if diameter is None:  # User cancelled
                 ivy_bus.publish("cancal_to_draw_vent_request", {})
                 return
@@ -1354,7 +1419,7 @@ class GraphicalView(tk.Tk):
 
         # Validate flow rate is an integer
         while True:
-            flow = simpledialog.askstring("Debit d'air (m³/h)", "Entrez le debit d'air (m³/h) :")
+            flow = create_custom_dialog("Debit d'air (m³/h)", "Entrez le debit d'air (m³/h) :")
             if flow is None:  # User cancelled
                 ivy_bus.publish("cancal_to_draw_vent_request", {})
                 return

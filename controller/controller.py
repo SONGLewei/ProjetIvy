@@ -892,11 +892,69 @@ class Controller:
         
         max_flow = None
         try:
-            max_flow_str = simpledialog.askstring(
-                "Débit Maximal du Plenum",
-                "Entrez le débit maximal (m3/h) pour ce plenum:",
-                initialvalue="1000"
-            )
+            # Create a custom dialog for max flow input
+            from tkinter import Toplevel, StringVar, Entry, Label, Button, Frame
+            
+            def get_max_flow():
+                # Create a custom dialog
+                dialog = Toplevel()
+                dialog.title("Débit Maximal du Plenum")
+                # Make dialog stay on top
+                dialog.attributes("-topmost", True)
+                dialog.resizable(False, False)
+                dialog.grab_set()  # Make it modal
+                dialog.focus_force()
+                
+                # Configure the dialog
+                dialog_width = 350
+                dialog_height = 150
+                dialog.configure(padx=20, pady=20)
+                
+                # Create input field with label
+                Label(dialog, text="Entrez le débit maximal (m3/h) pour ce plenum:", anchor="w").pack(pady=(0, 10), fill="x")
+                
+                # Entry with initial value
+                result = StringVar(value="1000")
+                entry = Entry(dialog, textvariable=result, width=30)
+                entry.pack(pady=(0, 20), fill="x")
+                entry.focus_set()
+                entry.select_range(0, 'end')  # Select all text
+                
+                # Results holder
+                dialog.result = None
+                
+                # Button callbacks
+                def on_ok():
+                    dialog.result = result.get()
+                    dialog.destroy()
+                    
+                def on_cancel():
+                    dialog.result = None
+                    dialog.destroy()
+                
+                # Button frame
+                button_frame = Frame(dialog)
+                button_frame.pack(side="bottom", fill="x")
+                
+                # Add buttons
+                Button(button_frame, text="OK", command=on_ok, width=10).pack(side="right", padx=(5, 0))
+                Button(button_frame, text="Annuler", command=on_cancel, width=10).pack(side="right", padx=5)
+                
+                # Handle Enter and Escape keys
+                dialog.bind("<Return>", lambda event: on_ok())
+                dialog.bind("<Escape>", lambda event: on_cancel())
+                
+                # Center the dialog
+                x = (dialog.winfo_screenwidth() // 2) - (dialog_width // 2)
+                y = (dialog.winfo_screenheight() // 2) - (dialog_height // 2)
+                dialog.geometry(f"{dialog_width}x{dialog_height}+{x}+{y}")
+                
+                # Wait for dialog to close
+                dialog.wait_window()
+                return dialog.result
+                
+            # Get max flow input
+            max_flow_str = get_max_flow()
 
             if max_flow_str:
                 try:
@@ -932,9 +990,12 @@ class Controller:
                     # Create a custom dialog for type selection
                     dialog = Toplevel()
                     dialog.title("Type de Plenum")
+                    # Make dialog stay on top
+                    dialog.attributes("-topmost", True)
                     # Don't set fixed size to allow proper sizing based on content
                     dialog.resizable(False, False)
                     dialog.grab_set()  # Make it modal
+                    dialog.focus_force()  # Force focus on the dialog
                     
                     # Add styling with ttk
                     from tkinter import ttk
