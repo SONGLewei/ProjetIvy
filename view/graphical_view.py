@@ -38,7 +38,7 @@ class GraphicalView(tk.Tk):
             print(f"Warning: PNG icon file not found at {png_path}")
 
         # Set initial window size
-        window_width = 1280
+        window_width = 1400
         window_height = 720
         self.geometry(f"{window_width}x{window_height}")
 
@@ -1926,8 +1926,8 @@ class GraphicalView(tk.Tk):
     def on_import_button_click(self):
 
         file_path = filedialog.askopenfilename(
-        title="选择 floors.json",
-        filetypes=[("JSON 文件", "*.json")],
+        title="Importer un projet",
+        filetypes=[("Fichier JSON", "*.json")],
         defaultextension=".json"
         )
         if not file_path:

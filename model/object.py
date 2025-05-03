@@ -20,4 +20,4 @@ class Object(ABC):
         """
         Calculate the length of the object.
         """
-        return ((self.end[0] - self.start[0]) ** 2 + (self.end[1] - self.start[1]) ** 2) ** 0.5  # 欧几里得距离
+        return ((self.end[0] - self.start[0]) ** 2 + (self.end[1] - self.start[1]) ** 2) ** 0.5
